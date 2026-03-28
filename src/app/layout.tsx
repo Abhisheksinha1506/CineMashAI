@@ -3,7 +3,7 @@ import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider-custom";
 import { AccessibilityProvider } from "@/components/accessibility-provider";
-import { SkipToMainContent } from "@/components/skip-to-main-content";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,8 +44,16 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <SkipToMainContent />
-            {children}
+            <Toaster theme="dark" position="top-center" />
+            <div className="relative min-h-screen flex flex-col overflow-x-hidden">
+              {/* Global Cinematic Background */}
+              <div className="scanlines-background z-0" />
+              <div className="film-grain-texture z-0" />
+              
+              <main className="relative z-10 flex-1 flex flex-col">
+                {children}
+              </main>
+            </div>
           </ThemeProvider>
         </AccessibilityProvider>
       </body>

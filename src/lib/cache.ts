@@ -161,7 +161,7 @@ export async function cachedFetch<T>(
       }
     }
   } catch (err) {
-    console.warn('[Cache] Redis Get Error:', err);
+    console.warn('[Cache] Redis Get (Non-Fatal):', err instanceof Error ? err.message : err);
   }
 
   // 3. Next.js Persistence Layer
@@ -186,7 +186,7 @@ export async function cachedFetch<T>(
       await redis.set(themeAwareKey, optimized, 'EX', config.ttl);
     }
   } catch (err) {
-    console.warn('[Cache] Redis Set Error:', err);
+    console.warn('[Cache] Redis Set (Non-Fatal):', err instanceof Error ? err.message : err);
   }
 
   // Populate Memory
@@ -210,6 +210,17 @@ export const CACHE_CONFIGS = {
   FUSION_GENERATION: { ttl: getTTL('FUSION'), tags: ['fusion'], compress: true },
   GALLERY_QUERY: { ttl: getTTL('GALLERY'), tags: ['gallery'] },
   RATE_LIMIT: { ttl: getTTL('RATE'), tags: ['ratelimit'], compress: false },
+  TOKEN_USAGE: { ttl: getTTL('TOKEN_BUDGET'), tags: ['token_usage'], compress: false },
 };
+
+export function getCacheStats() {
+  const stats = memoryCache.getStats();
+  return { memory: { size: stats.size, maxSize: stats.maxSize, entries: [] as any[] } };
+}
+
+export async function invalidateCache(tags: string[]) {
+  memoryCache.clear();
+  // Additional Redis tag sweeping can be implemented via SCAN if needed.
+}
 
 export { memoryCache };

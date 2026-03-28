@@ -1,15 +1,7 @@
 import crypto from 'crypto';
-import { supabaseServer } from '@/lib/supabase-server';
-
-// Simplified fusion cache entry interface
-interface FusionCacheSimpleEntry {
-  id: string;
-  cache_key: string;
-  fusion_data: any;
-  expires_at: string;
-  hit_count: number;
-  created_at: string;
-}
+import { getRedisClient, KEY_PREFIXES, sanitizeKey } from './redis';
+import { memoryCache, CACHE_CONFIGS } from './cache';
+import { generateShareToken } from './ai-server';
 
 // Generate theme-agnostic cache key for fusion request
 export function generateFusionCacheKey(
@@ -27,10 +19,11 @@ export function generateFusionCacheKey(
   
   // Generate SHA-256 hash
   const inputString = JSON.stringify(fusionInput);
-  return crypto.createHash('sha256').update(inputString).digest('hex');
+  const hash = crypto.createHash('sha256').update(inputString).digest('hex');
+  return sanitizeKey(`${KEY_PREFIXES.FUSION}${hash}`);
 }
 
-// Get cached fusion from Supabase
+// Get cached fusion from Redis/Memory
 export async function getCachedFusion(
   movieIds: number[],
   constraints?: string
@@ -38,74 +31,77 @@ export async function getCachedFusion(
   const cacheKey = generateFusionCacheKey(movieIds, constraints);
   
   try {
-    const { data, error } = await supabaseServer
-      .from('fusion_cache_simple')
-      .select('*')
-      .eq('cache_key', cacheKey)
-      .gt('expires_at', new Date().toISOString())
-      .limit(1);
+    // 1. Memory Hit?
+    const memHit = memoryCache.get<any>(cacheKey);
+    if (memHit) {
+      memHit.hitCount = (memHit.hitCount || 0) + 1;
+      return {
+        data: memHit.data,
+        cacheAge: Math.floor((Date.now() - memHit.createdAt) / 1000),
+        hitCount: memHit.hitCount
+      };
+    }
 
-    if (error) throw error;
-    
-    if (data && data.length > 0) {
-      const entry = data[0];
+    // 2. Redis Hit?
+    const redis = getRedisClient();
+    const result = await redis.get(cacheKey);
+    if (result) {
+      const entry = JSON.parse(result);
       
-      // Update hit count and last accessed time
-      await supabaseServer
-        .from('fusion_cache_simple')
-        .update({ 
-          hit_count: entry.hit_count + 1
-        })
-        .eq('id', entry.id);
+      entry.hitCount = (entry.hitCount || 0) + 1;
       
-      // Parse fusion data
-      const fusionData = typeof entry.fusion_data === 'string' 
-        ? JSON.parse(entry.fusion_data) 
-        : entry.fusion_data;
+      // Update hit count in Redis anonymously (fire and forget)
+      redis.set(cacheKey, JSON.stringify(entry), 'KEEPTTL').catch(() => {});
       
-      // Calculate cache age in seconds
-      const cacheAge = Math.floor((Date.now() - new Date(entry.created_at).getTime()) / 1000);
+      // Populate Memory
+      memoryCache.set(cacheKey, entry, CACHE_CONFIGS.FUSION_GENERATION.ttl);
       
       return {
-        data: fusionData,
-        cacheAge,
-        hitCount: entry.hit_count + 1
+        data: entry.data,
+        cacheAge: Math.floor((Date.now() - entry.createdAt) / 1000),
+        hitCount: entry.hitCount
       };
     }
     
     return null;
   } catch (error) {
-    console.error('Error getting cached fusion:', error);
+    console.warn('[FusionCache] Redis Access (Non-Fatal):', error instanceof Error ? error.message : error);
     return null;
   }
 }
 
-// Cache fusion result in Supabase
+// Cache fusion result in Redis/Memory
 export async function cacheFusion(
   movieIds: number[],
   constraints: string | undefined,
-  fusionData: any
+  fusionData: any,
+  shareToken?: string
 ): Promise<void> {
   const cacheKey = generateFusionCacheKey(movieIds, constraints);
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+  
+  const entry = {
+    data: {
+      ...fusionData,
+      share_token: shareToken || generateShareToken()
+    },
+    createdAt: Date.now(),
+    hitCount: 1
+  };
   
   try {
-    const { error } = await supabaseServer
-      .from('fusion_cache_simple')
-      .upsert({
-        cache_key: cacheKey,
-        fusion_data: JSON.stringify(fusionData),
-        expires_at: expiresAt.toISOString(),
-        hit_count: 1
-      }, {
-        onConflict: 'cache_key'
-      });
-
-    if (error) throw error;
+    memoryCache.set(cacheKey, entry, CACHE_CONFIGS.FUSION_GENERATION.ttl);
     
-    console.log(`Fusion cached with key: ${cacheKey.substring(0, 8)}...`);
+    const redis = getRedisClient();
+    await redis.set(
+      cacheKey, 
+      JSON.stringify(entry), 
+      'EX', 
+      CACHE_CONFIGS.FUSION_GENERATION.ttl
+    );
+    
+    console.log(`Fusion cached with key: ${cacheKey.substring(0, 15)}...`);
   } catch (error) {
-    console.error('Error caching fusion:', error);
+    console.warn('[FusionCache] Redis Store (Non-Fatal):', error instanceof Error ? error.message : error);
   }
 }
 
@@ -117,50 +113,18 @@ export async function invalidateFusionCache(
   const cacheKey = generateFusionCacheKey(movieIds, constraints);
   
   try {
-    const { error } = await supabaseServer
-      .from('fusion_cache_simple')
-      .delete()
-      .eq('cache_key', cacheKey);
-
-    if (error) throw error;
+    memoryCache.delete(cacheKey);
+    const redis = getRedisClient();
+    await redis.del(cacheKey);
     
-    console.log(`Fusion cache invalidated: ${cacheKey.substring(0, 8)}...`);
+    console.log(`Fusion cache invalidated: ${cacheKey.substring(0, 15)}...`);
   } catch (error) {
-    console.error('Error invalidating fusion cache:', error);
+    console.warn('[FusionCache] Redis Invalidate (Non-Fatal):', error instanceof Error ? error.message : error);
   }
 }
 
-// Get fusion cache statistics
+// Get fusion cache statistics (mocked since pure Redis doesn't iterate well)
 export async function getFusionCacheStats(): Promise<any> {
-  try {
-    const { data, error } = await supabaseServer
-      .from('fusion_cache_simple')
-      .select('id, cache_key, hit_count, created_at, expires_at')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    
-    const now = new Date();
-    const stats = {
-      totalEntries: data?.length || 0,
-      activeEntries: data?.filter(entry => new Date(entry.expires_at) > now).length || 0,
-      expiredEntries: data?.filter(entry => new Date(entry.expires_at) <= now).length || 0,
-      totalHits: data?.reduce((sum, entry) => sum + entry.hit_count, 0) || 0,
-      averageHits: data?.length ? (data.reduce((sum, entry) => sum + entry.hit_count, 0) / data.length) : 0,
-      oldestEntry: data?.[0]?.created_at || null,
-      newestEntry: data?.[data.length - 1]?.created_at || null,
-      entries: data?.slice(0, 10).map(entry => ({
-        cacheKey: entry.cache_key.substring(0, 8) + '...',
-        hitCount: entry.hit_count,
-        createdAt: entry.created_at,
-        expiresAt: entry.expires_at,
-        isExpired: new Date(entry.expires_at) <= now
-      })) || []
-    };
-    
-    return stats;
-  } catch (error) {
-    console.error('Error getting fusion cache stats:', error);
     return {
       totalEntries: 0,
       activeEntries: 0,
@@ -171,23 +135,11 @@ export async function getFusionCacheStats(): Promise<any> {
       newestEntry: null,
       entries: []
     };
-  }
 }
 
-// Clean up expired fusion cache entries
+// Clean up expired fusion cache entries (Auto handled by Redis)
 export async function cleanupExpiredFusionCache(): Promise<void> {
-  try {
-    const { error } = await supabaseServer
-      .from('fusion_cache_simple')
-      .delete()
-      .lt('expires_at', new Date().toISOString());
-
-    if (error) throw error;
-    
-    console.log('Cleaned up expired fusion cache entries');
-  } catch (error) {
-    console.error('Error cleaning up fusion cache:', error);
-  }
+  // Redis handles TTL expiration natively
 }
 
 // Check if fusion should be cached based on request characteristics
@@ -205,7 +157,10 @@ export function shouldCacheFusion(
 }
 
 // Get cache age in seconds for a given cache entry
-export function getCacheAge(createdAt: string): number {
+export function getCacheAge(createdAt: string | number): number {
+  if (typeof createdAt === 'number') {
+    return Math.floor((Date.now() - createdAt) / 1000);
+  }
   return Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
 }
 

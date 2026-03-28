@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 interface TrendingPageSidebarProps {
   trendingFusions: any[];
-  onRemix?: (id: string) => void;
+  onRemix?: (share_token: string) => void;
 }
 
 export function TrendingPageSidebar({ trendingFusions, onRemix }: TrendingPageSidebarProps) {
@@ -92,7 +92,7 @@ export function TrendingPageSidebar({ trendingFusions, onRemix }: TrendingPageSi
 
                   {/* Remix button */}
                   <button
-                    onClick={() => onRemix?.(fusion.id)}
+                    onClick={() => onRemix?.(fusion.share_token)}
                     className="w-full mt-2 px-3 py-2 bg-[var(--primary)]/10 border border-[var(--primary)]/20 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-[var(--primary)]/20 transition-all focus-ring"
                   >
                     Remix

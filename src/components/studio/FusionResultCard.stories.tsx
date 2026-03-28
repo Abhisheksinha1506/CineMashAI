@@ -53,10 +53,6 @@ export function FusionResultCardStory() {
       <h2 className="text-2xl font-bold text-white mb-4">FusionResultCard Component Preview</h2>
       <FusionResultCard
         {...mockFusionData}
-        onSaveToGallery={() => console.log('Save to gallery clicked')}
-        onRemix={() => console.log('Remix clicked')}
-        onShareLink={() => console.log('Share link clicked')}
-        onRefineInChat={() => console.log('Refine in chat clicked')}
       />
     </div>
   );

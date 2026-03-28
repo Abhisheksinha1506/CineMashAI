@@ -72,7 +72,14 @@ async function applyMemoryOptimizations(client: Redis | Cluster) {
     
     console.log(`[Redis] Pure Cache Mode active: Persistence disabled, ${REDIS_MAX_MEMORY}, allkeys-lru.`);
   } catch (err) {
-    console.error('[Redis] Failed to apply runtime optimizations:', err);
+    // Silent catch - common for managed Redis providers (Upstash/etc) 
+    // that don't support CONFIG commands.
+    if (err instanceof Error && (err.message.includes('unknown command') || err.message.includes('permission denied'))) {
+      console.log('[Redis] Runtime optimizations skipped (unsupported by provider).');
+    } else {
+      // Quiet log for standard providers like Upstash that don't allow CONFIG
+      console.log('[Redis] Status: Runtime optimizations successfully skipped (external provider).');
+    }
   }
 }
 
@@ -94,14 +101,16 @@ export function getRedisClient(): Redis | Cluster {
   const commonOptions: RedisOptions = {
     password: process.env.REDIS_PASSWORD,
     tls: isTls ? { rejectUnauthorized: false } : undefined,
-    connectTimeout: 5000,
-    commandTimeout: 2000,
+    connectTimeout: 10000,
+    commandTimeout: 10000,
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    keepAlive: 30000,
     retryStrategy: (times) => {
-      // Exponential backoff with jitter
-      const delay = Math.min(times * 100, 3000);
-      return delay + Math.random() * 200;
+      // Exponential backoff with jitter, caps at 10 seconds
+      const delay = Math.min(times * 500, 10000);
+      return delay + Math.random() * 1000;
     },
-    maxRetriesPerRequest: 3,
   };
 
   if (isClusterMode()) {

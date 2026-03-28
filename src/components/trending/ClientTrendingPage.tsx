@@ -42,9 +42,9 @@ export default function ClientTrendingPage({ initialData }: ClientTrendingPagePr
     return (newUpvotes: number) => handleVoteUpdate(fusionId, newUpvotes);
   };
 
-  const createRemixHandler = (id: string) => {
+  const createRemixHandler = (share_token: string) => {
     return () => {
-      window.location.href = `/studio?remix=${id}`;
+      window.location.href = `/studio?remix=${share_token}`;
     };
   };
 
@@ -161,7 +161,7 @@ export default function ClientTrendingPage({ initialData }: ClientTrendingPagePr
               <FeaturedFusionCard
                 fusion={fusions[0]}
                 rank={1}
-                onRemix={(id) => (window.location.href = `/studio?remix=${id}`)}
+                onRemix={(share_token) => (window.location.href = `/studio?remix=${share_token}`)}
               />
             </motion.div>
           </section>
@@ -192,7 +192,7 @@ export default function ClientTrendingPage({ initialData }: ClientTrendingPagePr
                     <GalleryFusionCard
                       {...fusion}
                       onVoteUpdate={createVoteUpdateHandler(fusion.id)}
-                      onRemix={createRemixHandler(fusion.id)}
+                      onRemix={createRemixHandler(fusion.share_token)}
                     />
                   </motion.div>
                 ))}

@@ -15,8 +15,9 @@ interface EnhancedGalleryFusionCardProps {
   upvotes?: number;
   created_at?: string;
   share_token?: string;
-  onRemix?: (id: string) => void;
+  onRemix?: (share_token: string) => void;
   onVoteUpdate?: (newUpvotes: number) => void;
+  onClick?: () => void;
 }
 
 export function EnhancedGalleryFusionCard({
@@ -30,6 +31,7 @@ export function EnhancedGalleryFusionCard({
   share_token,
   onRemix,
   onVoteUpdate,
+  onClick,
 }: EnhancedGalleryFusionCardProps) {
   const [currentUpvotes, setCurrentUpvotes] = useState(upvotes);
   const [isVoting, setIsVoting] = useState(false);
@@ -46,7 +48,12 @@ export function EnhancedGalleryFusionCard({
     
     if (isVoting || hasVoted || !share_token) return;
 
+    // Optimistic Update
     setIsVoting(true);
+    setHasVoted(true);
+    const previousUpvotes = currentUpvotes;
+    setCurrentUpvotes(prev => prev + 1);
+
     try {
       const response = await fetch('/api/vote', {
         method: 'POST',
@@ -61,11 +68,17 @@ export function EnhancedGalleryFusionCard({
       if (result.success) {
         const newUpvotes = result.data.newUpvotes;
         setCurrentUpvotes(newUpvotes);
-        setHasVoted(true);
         onVoteUpdate?.(newUpvotes);
+      } else {
+        // Rollback
+        setHasVoted(false);
+        setCurrentUpvotes(previousUpvotes);
       }
     } catch (error) {
       console.error('Vote error:', error);
+      // Rollback
+      setHasVoted(false);
+      setCurrentUpvotes(previousUpvotes);
     } finally {
       setIsVoting(false);
     }
@@ -88,7 +101,8 @@ export function EnhancedGalleryFusionCard({
         boxShadow: '0 0 40px rgba(0,240,255,0.2)'
       }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="glassmorphism dark:glassmorphism light:bg-[var(--card)] light:shadow-[0_4px_24px_rgba(0,0,0,0.1)] border border-white/[0.1] dark:border-white/[0.1] light:border-[var(--border)] rounded-2xl overflow-hidden hover:border-[var(--primary)]/30 transition-all duration-300"
+      onClick={onClick}
+      className="group relative glassmorphism dark:glassmorphism light:bg-[var(--card)] light:shadow-[0_4px_24px_rgba(0,0,0,0.1)] border border-white/[0.1] dark:border-white/[0.1] light:border-[var(--border)] rounded-2xl overflow-hidden hover:border-[var(--primary)]/30 transition-all duration-300 cursor-pointer"
     >
       {/* Collage Header */}
       <div className="relative h-48 overflow-hidden">
@@ -187,11 +201,15 @@ export function EnhancedGalleryFusionCard({
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => onRemix?.(id)}
-          className="w-full px-4 py-2.5 bg-gradient-to-r from-[var(--primary)]/10 to-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-xl flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest text-[var(--primary)] hover:bg-[var(--primary)]/20 transition-all focus-ring"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemix?.(share_token || id);
+          }}
+          title="Create a new fusion based on this one"
+          className="w-full px-4 py-3 bg-gradient-to-r from-[var(--primary)]/10 to-[var(--primary)]/5 border border-[var(--primary)]/30 rounded-xl flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[var(--primary)] hover:bg-[var(--primary)]/20 transition-all focus-ring shadow-[0_0_15px_rgba(0,240,255,0.1)]"
         >
-          <Sparkles className="h-3.5 w-3.5" />
-          Remix
+          <Sparkles className="h-4 w-4" />
+          Remix Mashup
         </motion.button>
       </div>
     </motion.div>

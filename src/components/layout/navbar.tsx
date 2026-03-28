@@ -2,17 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Film, GalleryHorizontal, Zap, TrendingUp, User } from 'lucide-react';
+import { Film, GalleryHorizontal, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { ThemeToggle } from '@/components/theme-toggle';
 
 const navItems = [
   { name: 'Home', href: '/', icon: Film },
   { name: 'Studio', href: '/studio', icon: Zap },
   { name: 'Gallery', href: '/gallery', icon: GalleryHorizontal },
-  { name: 'Trending', href: '/trending', icon: TrendingUp },
 ];
 
 export function Navbar({ children }: { children?: React.ReactNode }) {
@@ -105,20 +103,6 @@ export function Navbar({ children }: { children?: React.ReactNode }) {
               </Button>
             </Link>
 
-            {/* Theme Toggle */}
-            <ThemeToggle />
-
-            {/* Avatar */}
-            <motion.button
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.95 }}
-              className="h-9 w-9 rounded-full bg-white/[0.06] dark:bg-white/[0.06] light:bg-[var(--border)]/50 border border-white/[0.08] dark:border-white/[0.08] light:border-[var(--border)] hover:border-[var(--primary)]/30 flex items-center justify-center text-zinc-400 dark:text-zinc-400 light:text-zinc-500 hover:text-[var(--text)] transition-all duration-300 focus-ring"
-              aria-label="User profile menu"
-              aria-expanded="false"
-              aria-haspopup="menu"
-            >
-              <User className="h-4 w-4" aria-hidden="true" />
-            </motion.button>
           </div>
         </div>
       </div>

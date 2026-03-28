@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { db } from '@/lib/db';
-import { fusions } from '@/lib/schema';
-import { getMovieDetails } from '@/lib/tmdb-simple';
-import { checkTokenBudget, consumeTokens } from '@/lib/token-budget';
 import { hashIP } from '@/lib/utils';
-import { generateFusion } from '@/lib/groq';
-import { generateShareToken } from '@/lib/ai-server';
-import { getCachedFusion, cacheFusion, shouldCacheFusion } from '@/lib/fusion-cache-simple';
-import { enrichCastWithPhotos } from '@/lib/cast-enrichment';
-import crypto from 'crypto';
+import { getCachedFusion, shouldCacheFusion } from '@/lib/fusion-cache-simple';
+import { addFusionJob } from '@/lib/queue';
+import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 
 // Input validation schema
 const FuseRequestSchema = z.object({
@@ -21,158 +15,77 @@ type FuseRequest = z.infer<typeof FuseRequestSchema>;
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  let aiProvider = 'groq';
   
   try {
-    // Parse request body
+    // 1. Parse and validate request body
     const body: FuseRequest = await request.json();
-    
-    // Validate input
     const validation = FuseRequestSchema.safeParse(body);
+    
     if (!validation.success) {
-      const response = NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid request: ' + validation.error.format()._errors.join(', ') 
-        },
+      return NextResponse.json(
+        { success: false, error: 'Invalid movie selection (2-4 numeric IDs required)' },
         { status: 400 }
       );
-      response.headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
-      return response;
     }
 
     const { movieIds, constraints } = validation.data;
+    const userId = hashIP(request);
     
-    // Check cache first for instant response
+    // 2. Rate Limit (Redis-backed distributed check)
+    const rateLimit = await checkRateLimit(request);
+    if (!rateLimit.allowed) {
+      return createRateLimitResponse(rateLimit);
+    }
+
+    // 3. Check Cache (Instant Response for common fusions)
     if (shouldCacheFusion(movieIds, constraints)) {
       const cachedResult = await getCachedFusion(movieIds, constraints);
       if (cachedResult) {
-        const response = NextResponse.json({
+        return NextResponse.json({
           success: true,
           data: {
             ...cachedResult.data,
-            share_token: `cached-${crypto.randomUUID().substring(0, 8)}`,
+            share_token: `cached-${Math.random().toString(36).substring(7)}`,
           },
-          served_from_cache: true,
-          cache_age_seconds: cachedResult.cacheAge,
-          cache_hit_count: cachedResult.hitCount
+          served_from_cache: true
         });
-        
-        response.headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
-        response.headers.set('X-Cache-Status', 'hit');
-        response.headers.set('X-Cache-Age', cachedResult.cacheAge.toString());
-        response.headers.set('X-AI-Provider', 'cache');
-        response.headers.set('Cache-Control', 'private, no-cache');
-        
-        return response;
       }
     }
     
-    // Get user IP for token budget tracking
-    const userId = hashIP(request);
-    
-    // Check token budget (rough estimate: 1000 tokens per fusion)
-    const tokenCheck = await checkTokenBudget(userId, 1000);
-    if (!tokenCheck.allowed) {
-      const response = NextResponse.json(
-        { 
-          success: false, 
-          error: tokenCheck.error || 'Insufficient token budget' 
-        },
-        { status: 429 }
-      );
-      response.headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
-      return response;
-    }
-
-    // Fetch movie details for all selected movies
-    const movieDetailsPromises = movieIds.map(async (id) => {
-      const details = await getMovieDetails(id.toString());
-      return details;
-    });
-
-    const moviesData = await Promise.all(movieDetailsPromises);
-    
+    // 4. Enqueue Job (Asynchronous Backend Scaling)
     try {
-      // Call the existing AI generation logic with Groq + OpenRouter fallback
-      const parsedFusionData = await generateFusion(moviesData as any, constraints);
-
-      // Enrich cast with real headshots
-      const enrichedCast = await enrichCastWithPhotos((parsedFusionData as any).suggestedCast || []);
-      
-      const finalFusionData = {
-        ...parsedFusionData,
-        suggestedCast: enrichedCast,
-        // Legacy compatibility for UI
-        suggested_cast: enrichedCast
-      };
-
-      // Generate unique share token
-      const shareToken = generateShareToken();
-      
-      // Save to database
-      const movieIdsArray = movieIds.map(id => id.toString());
-      
-      await db.insert(fusions).values({
-        id: crypto.randomUUID(),
-        share_token: shareToken,
-        movie_ids: JSON.stringify(movieIdsArray),
-        fusion_data: JSON.stringify(finalFusionData),
-        ip_hash: userId,
-        created_at: new Date().toISOString(),
-        upvotes: 0,
+      const job = await addFusionJob({
+        movieIds,
+        constraints,
+        userId
       });
-
-      // Cache the result for future requests
-      if (shouldCacheFusion(movieIds, constraints)) {
-        await cacheFusion(movieIds, constraints, finalFusionData);
-      }
-
-      // Consume tokens from budget
-      await consumeTokens(userId, 1000);
 
       const response = NextResponse.json({
         success: true,
-        data: {
-          ...finalFusionData,
-          share_token: shareToken,
-        },
-        served_from_cache: false,
-        cache_age_seconds: 0,
-        cache_hit_count: 0
+        jobId: job.id,
+        status: 'queued',
+        message: 'Fusion request accepted into the distributed queue.'
+      }, { 
+        status: 202 // Accepted
       });
       
       response.headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
-      response.headers.set('X-Cache-Status', 'miss');
-      response.headers.set('X-AI-Provider', aiProvider);
-      response.headers.set('Cache-Control', 'private, no-cache');
-      
+      response.headers.set('X-Job-ID', job.id || '');
       return response;
       
-    } catch (error: any) {
-      console.error('AI or DB error:', error);
-      
-      const response = NextResponse.json(
-        { 
-          success: false, 
-          error: error.message || 'Failed to generate fusion. Please try again.' 
-        },
-        { status: 500 }
+    } catch (enqueueError: any) {
+      console.error('[Fuse API] Enqueue failed:', enqueueError);
+      return NextResponse.json(
+        { success: false, error: 'Database/Queue overloaded. Please try again.' },
+        { status: 503 }
       );
-      
-      response.headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
-      response.headers.set('X-AI-Provider', aiProvider);
-      return response;
     }
+    
   } catch (error) {
-    const response = NextResponse.json(
-      { 
-        success: false, 
-        error: 'Invalid request format' 
-      },
-      { status: 400 }
+    console.error('[Fuse API] Fatal error:', error);
+    return NextResponse.json(
+        { success: false, error: 'Internal Server Error' },
+        { status: 500 }
     );
-    response.headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
-    return response;
   }
 }

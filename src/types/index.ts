@@ -8,6 +8,11 @@ export interface Movie {
   genre_ids: number[];
   genres?: Genre[];
   cast?: CastMember[];
+  // Fusion-specific properties
+  isFusion?: boolean;
+  share_token?: string;
+  sourceMovieIds?: string[];
+  sourceMovies?: Movie[];
 }
 
 export interface Genre {
@@ -91,7 +96,7 @@ export interface TMDBResponse {
   results: Movie[];
   page: number;
   total_pages: number;
-  total_results: number;
+  total_results?: number;
 }
 
 export interface AIResponse {

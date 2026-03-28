@@ -7,7 +7,7 @@ import { getMoviePosterUrl } from '@/lib/api/tmdb-client';
 interface FeaturedFusionCardProps {
   fusion: any;
   rank: number;
-  onRemix?: (id: string) => void;
+  onRemix?: (share_token: string) => void;
 }
 
 export function FeaturedFusionCard({ fusion, rank, onRemix }: FeaturedFusionCardProps) {
@@ -129,7 +129,7 @@ export function FeaturedFusionCard({ fusion, rank, onRemix }: FeaturedFusionCard
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => onRemix?.(fusion.id)}
+            onClick={() => onRemix?.(fusion.share_token)}
             className="w-full px-6 py-3 bg-gradient-to-r from-[#00f0ff]/10 to-[#00f0ff]/5 border border-[#00f0ff]/30 rounded-2xl flex items-center justify-center gap-2 text-[12px] font-black uppercase tracking-widest text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-all focus-ring"
           >
             <Sparkles className="h-4 w-4" />

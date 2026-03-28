@@ -25,7 +25,14 @@ async function fetchInternalTMDB(
   }
   
   const queryString = queryParams.toString();
-  const url = `/api/tmdb/${path}${queryString ? `?${queryString}` : ''}`;
+  
+  // Construct URL - absolute for server, relative for client
+  let url = `/api/tmdb/${path}${queryString ? `?${queryString}` : ''}`;
+  
+  if (typeof window === 'undefined') {
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    url = `${baseUrl}${url}`;
+  }
   
   const controller = new AbortController();
   const timeoutMs = options.timeout || 15000; // Increased default to 15s
@@ -103,11 +110,16 @@ export async function searchMovies(
     };
   }
   
-  return fetchInternalTMDB('search/movie', { 
-    query, 
-    page: page.toString(),
-    include_adult: 'false'
-  }, options);
+  const queryString = new URLSearchParams({ 
+    q: query, 
+    page: page.toString() 
+  }).toString();
+
+  const response = await fetch(`/api/movies/search?${queryString}`);
+  if (!response.ok) {
+    throw new Error('Failed to search movies from hybrid source');
+  }
+  return response.json();
 }
 
 export async function getPopularMovies(

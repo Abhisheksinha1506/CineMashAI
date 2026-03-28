@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCacheStats, invalidateCache } from '@/lib/cache';
-import { getFusionCacheStats, cleanupExpiredFusionCache } from '@/lib/fusion-cache';
+import { getFusionCacheStats, cleanupExpiredFusionCache } from '@/lib/fusion-cache-simple';
 import { supabaseServer } from '@/lib/supabase-server';
 
 export async function GET(request: NextRequest) {
@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
     try {
       const dbStart = Date.now();
       const { error } = await supabaseServer
-        .from('fusion_cache')
-        .select('count')
+        .from('movies')
+        .select('id')
         .limit(1);
       dbLatency = Date.now() - dbStart;
       dbHealth = error ? 'error' : 'healthy';
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Calculate total cache size estimates
-    const memorySizeBytes = memoryStats.memory.entries.reduce((total, entry) => {
+    const memorySizeBytes = memoryStats.memory.entries.reduce((total: number, entry: any) => {
       return total + JSON.stringify(entry).length * 2; // Rough estimate
     }, 0);
     

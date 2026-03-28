@@ -68,7 +68,7 @@ export default function TrendingFusionsClient({ initialFusions }: TrendingFusion
             <FeaturedFusionCard
               fusion={fusion}
               rank={index + 1}
-              onRemix={(id) => (window.location.href = `/studio?remix=${id}`)}
+              onRemix={(share_token) => (window.location.href = `/studio?remix=${share_token}`)}
             />
           </motion.div>
         ))}

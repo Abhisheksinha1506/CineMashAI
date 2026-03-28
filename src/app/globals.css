@@ -162,8 +162,8 @@
       0deg,
       transparent,
       transparent 2px,
-      rgba(0, 0, 0, 0.015) 2px,
-      rgba(0, 0, 0, 0.015) 4px
+      rgba(0, 0, 0, 0.01) 2px,
+      rgba(0, 0, 0, 0.01) 4px
     );
   }
 
@@ -593,9 +593,9 @@
   }
   
   .film-grain-texture {
-    position: absolute;
+    position: fixed;
     inset: 0;
-    opacity: 0.03;
+    opacity: 0.025;
     pointer-events: none;
     background-image: 
       radial-gradient(circle at 20% 80%, rgba(255,255,255,0.02) 0%, transparent 50%),
@@ -736,26 +736,28 @@
   .floating-fuse-button {
     background: linear-gradient(135deg, var(--primary), var(--primary)/80);
     color: #000000;
-    border: 2px solid rgba(0, 240, 255, 0.3);
+    border: 1px solid rgba(0, 240, 255, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     box-shadow: 
       0 0 20px rgba(0, 240, 255, 0.4),
-      0 0 40px rgba(0, 240, 255, 0.2),
-      inset 0 0 0 0 rgba(255, 255, 255, 0.1);
+      0 0 40px rgba(0, 240, 255, 0.2);
   }
   
   .floating-fuse-button:hover {
     transform: scale(1.05);
     box-shadow: 
       0 0 30px rgba(0, 240, 255, 0.6),
-      0 0 60px rgba(0, 240, 255, 0.3),
-      inset 0 0 0 0 rgba(255, 255, 255, 0.2);
+      0 0 60px rgba(0, 240, 255, 0.3);
   }
   
   .floating-fuse-button.disabled {
-    background: rgba(255, 255, 255, 0.05);
-    color: #6b7280;
-    border: 2px solid rgba(255, 255, 255, 0.1);
-    box-shadow: none;
+    background: rgba(30, 30, 35, 0.85); /* Much more solid than 0.05 */
+    color: rgba(255, 255, 255, 0.4); /* Brighter text for readability */
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
     cursor: not-allowed;
   }
 
@@ -830,12 +832,11 @@
     box-shadow: 0 0 0 4px rgba(0,212,255,0.2);
   }
 
-  /* ─ Animated Scanlines Background ─ */
   .scanlines-background {
-    position: absolute;
+    position: fixed;
     inset: 0;
     pointer-events: none;
-    opacity: 0.03;
+    opacity: 0.025;
     background-image: repeating-linear-gradient(
       0deg,
       transparent,

@@ -342,6 +342,20 @@ function buildFusionUserPrompt(
 // ─── Internal: JSON Parse + Zod Validate + Auto-Retry ────────────────────────
 
 /**
+ * Extracts a JSON object from a string that might contain markdown formatting
+ * or conversational wrappers.
+ */
+function extractJson(rawText: string): string {
+  let cleanText = rawText.trim();
+  const jsonStart = cleanText.indexOf('{');
+  const jsonEnd = cleanText.lastIndexOf('}');
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+    return cleanText.substring(jsonStart, jsonEnd + 1);
+  }
+  return cleanText;
+}
+
+/**
  * Parses raw LLM text as JSON, then validates it against FusionSchema.
  * If validation fails, sends a targeted follow-up prompt asking the model
  * to fix only the broken fields — one retry max before throwing.
@@ -358,7 +372,7 @@ async function parseAndValidate(
   let parsed: unknown;
 
   try {
-    parsed = JSON.parse(rawText);
+    parsed = JSON.parse(extractJson(rawText));
   } catch {
     // Model emitted non-JSON — request a clean re-render
     console.warn('🎬 Script supervisor caught a typo — requesting clean copy…');
@@ -371,7 +385,7 @@ async function parseAndValidate(
       },
     ];
     const retryRaw = await callLLM(retryMessages);
-    parsed = JSON.parse(retryRaw); // If this throws, we propagate — no infinite loops.
+    parsed = JSON.parse(extractJson(retryRaw)); // If this throws, we propagate — no infinite loops.
   }
 
   const result = FusionSchema.safeParse(parsed);
@@ -394,7 +408,7 @@ async function parseAndValidate(
   ];
 
   const retryRaw = await callLLM(retryMessages);
-  return FusionSchema.parse(JSON.parse(retryRaw));
+  return FusionSchema.parse(JSON.parse(extractJson(retryRaw)));
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -410,12 +424,12 @@ async function parseAndValidate(
  *
  * @param movies      - 2–4 TMDbMovie objects selected by the user.
  * @param constraints - Optional creative direction (e.g. "make it a musical").
- * @returns Promise resolving to a validated FusionData object.
+ * @returns Promise resolving to a validated FusionData object and the actor pool used.
  */
 export async function generateFusion(
   movies: TMDbMovie[],
   constraints?: string
-): Promise<FusionData> {
+): Promise<{ fusionData: FusionData; actorPool: Array<{ name: string; originalMovie: string; profile_path: string | null }> }> {
   console.time('[CineMash] generateFusion total');
 
   /** Fetch credits for all source movies in parallel — faster than sequential. */
@@ -428,6 +442,7 @@ export async function generateFusion(
     ((credits as any).cast ?? []).slice(0, 15).map((actor: any) => ({
       name: actor.name as string,
       originalMovie: movies[idx].title,
+      profile_path: (actor as any).profile_path || null
     }))
   );
 
@@ -443,7 +458,7 @@ export async function generateFusion(
   const fusionData = await parseAndValidate(rawText, messages);
 
   console.timeEnd('[CineMash] generateFusion total');
-  return fusionData;
+  return { fusionData, actorPool };
 }
 
 /**

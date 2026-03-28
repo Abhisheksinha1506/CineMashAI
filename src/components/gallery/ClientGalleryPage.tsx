@@ -8,6 +8,8 @@ import { useRealtimeGallery } from '@/hooks/useRealtime';
 import { cn } from '@/lib/utils';
 import { EnhancedGalleryFusionCard } from '@/components/gallery/EnhancedGalleryFusionCard';
 import { FilmStripLoader } from '@/components/gallery/FilmStripLoader';
+import { FusionDetailsModal } from '@/components/gallery/FusionDetailsModal';
+import { DynamicGuide, GuideButton } from '@/components/ui/DynamicGuide';
 import Link from 'next/link';
 
 const FILTERS = [
@@ -34,6 +36,10 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedFusion, setSelectedFusion] = useState<any | null>(null);
+  const [featuredFusion, setFeaturedFusion] = useState<any | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [showGuide, setShowGuide] = useState(true);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Real-time gallery updates
@@ -54,10 +60,18 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
     return (newUpvotes: number) => handleVoteUpdate(fusionId, newUpvotes);
   };
 
-  const createRemixHandler = (id: string) => {
-    return () => {
-      window.location.href = `/studio?remix=${id}`;
+  const createRemixHandler = (share_token: string) => {
+    return (e?: React.MouseEvent) => {
+      if (e) {
+        e.stopPropagation();
+      }
+      window.location.href = `/studio?remix=${share_token}`;
     };
+  };
+
+  const handleViewDetails = (fusion: any) => {
+    setSelectedFusion(fusion);
+    setIsDetailsOpen(true);
   };
 
   const fetchGallery = useCallback(async (sort: string = 'newest', limit: number = 24) => {
@@ -65,25 +79,67 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
     try {
       const response = await fetch(`/api/gallery?sort=${sort}&limit=${limit}`);
       const result = await response.json();
-      if (result.success) setFusions(result.data);
+      if (result.success) {
+        setFusions(result.data);
+        if (sort === 'popular') {
+          setFeaturedFusion(result.data[0]);
+        } else {
+          // Always try to get featured fusion separately
+          const featuredRes = await fetch('/api/gallery?sort=popular&limit=1');
+          const featuredData = await featuredRes.json();
+          if (featuredData.success && featuredData.data.length > 0) {
+            setFeaturedFusion(featuredData.data[0]);
+          }
+        }
+      }
     } catch (error) {
       console.error('Error fetching gallery:', error);
+      // Don't set fallback here to avoid state issues
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, []); // Remove dependencies to prevent infinite loop
 
   useEffect(() => {
     fetchGallery();
-  }, [fetchGallery]);
+  }, []); // Remove fetchGallery dependency to prevent infinite loop
 
   // Merge real-time updates with existing fusions
   useEffect(() => {
     if (realtimeFusions.length > 0 && !realtimeLoading) {
       setFusions(prev => {
         const existingIds = new Set(prev.map(f => f.id));
-        const newFusions = realtimeFusions.filter(f => !existingIds.has(f.id));
-        const merged = [...newFusions, ...prev];
+        const formattedRealtimeFusions = realtimeFusions.map(fusion => {
+          let movieIds = [];
+          let fusionData = {};
+          try {
+            movieIds = typeof fusion.movie_ids === 'string' ? JSON.parse(fusion.movie_ids) : fusion.movie_ids;
+            if (fusion.fusion_data) {
+              fusionData = typeof fusion.fusion_data === 'string' ? JSON.parse(fusion.fusion_data) : fusion.fusion_data;
+            }
+          } catch (e) {
+            console.error('Error parsing real-time fusion data:', e);
+          }
+          return {
+            id: fusion.id,
+            share_token: fusion.share_token,
+            createdAt: fusion.created_at,
+            upvotes: fusion.upvotes || 0,
+            movieIds,
+            ...(fusionData as any)
+          };
+        });
+        
+        // Update existing ones
+        const merged = prev.map(p => {
+          const updatedMatch = formattedRealtimeFusions.find(r => r.id === p.id);
+          return updatedMatch ? { ...p, ...updatedMatch } : p;
+        });
+
+        // Add brand new ones
+        const newFusions = formattedRealtimeFusions.filter(f => !existingIds.has(f.id));
+        merged.push(...newFusions);
+
         // Sort based on current filter
         if (selectedFilter === 'popular') {
           return merged.sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0)).slice(0, 24);
@@ -107,7 +163,7 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
       // Reset to original data when search is cleared
       fetchGallery(selectedFilter === 'popular' ? 'popular' : 'newest');
     }
-  }, [searchQuery, fetchGallery, selectedFilter]);
+  }, [searchQuery, selectedFilter]); // Remove fetchGallery dependency
 
   // Handle filter change
   const handleFilterChange = (filterId: string) => {
@@ -138,22 +194,28 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
   }
 
   return (
-    <div className="min-h-screen relative">
+    <div className="min-h-screen relative pt-20">
+      {/* Dynamic Guide */}
+      <DynamicGuide
+        currentPage="gallery"
+        isVisible={showGuide}
+        onVisibilityChange={setShowGuide}
+      />
+
+      {/* Guide Button */}
+      <GuideButton
+        onClick={() => setShowGuide(!showGuide)}
+        isVisible={showGuide}
+      />
+
       {/* Hero Section */}
-      <section className="relative py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+      <section className="relative py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
           className="text-center mb-12"
         >
-          <motion.div
-            className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full glassmorphism dark:glassmorphism light:bg-[var(--card)] light:shadow-[0_4px_24px_rgba(0,0,0,0.1)] border border-[#00f0ff]/20 dark:border-[#00f0ff]/20 light:border-[var(--primary)]/30"
-          >
-            <span className="h-2 w-2 rounded-full bg-[var(--primary)] animate-pulse shadow-[0_0_8px_rgba(0,240,255,0.6)]" />
-            <span className="text-[11px] font-black uppercase tracking-[0.15em] text-[var(--primary)]">Creative Gallery</span>
-          </motion.div>
-
           <h1 className="text-6xl sm:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-red-400 tracking-[-0.05em] uppercase mb-6">
             Fusion Gallery
           </h1>
@@ -210,7 +272,7 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
       </section>
 
       {/* Gallery Grid */}
-      <section className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto pb-16">
+      <section className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto pb-12">
         {fusions.length === 0 && !loading ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -241,31 +303,6 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
           </motion.div>
         ) : (
           <>
-            {/* Featured Fusion */}
-            {fusions.length > 0 && selectedFilter === 'popular' && (
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="mb-12"
-              >
-                <div className="text-center mb-8">
-                  <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-red-400 to-pink-400 tracking-[-0.03em] uppercase mb-4">
-                    Featured Fusion
-                  </h2>
-                  <p className="text-gray-400 text-lg">
-                    The most popular cinematic mashup of the week
-                  </p>
-                </div>
-                <EnhancedGalleryFusionCard
-                  {...fusions[0]}
-                  rank={1}
-                  onVoteUpdate={createVoteUpdateHandler(fusions[0].id)}
-                  onRemix={createRemixHandler(fusions[0].id)}
-                />
-              </motion.div>
-            )}
-
             {/* Gallery Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence>
@@ -283,7 +320,8 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
                     <GalleryFusionCard
                       {...fusion}
                       onVoteUpdate={createVoteUpdateHandler(fusion.id)}
-                      onRemix={createRemixHandler(fusion.id)}
+                      onRemix={createRemixHandler(fusion.share_token)}
+                      onClick={() => handleViewDetails(fusion)}
                     />
                   </motion.div>
                 ))}
@@ -299,6 +337,14 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
           </div>
         )}
       </section>
+
+      {/* Fusion Details Modal */}
+      <FusionDetailsModal 
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        fusion={selectedFusion}
+        onVoteUpdate={handleVoteUpdate}
+      />
 
       {/* Scroll to Top Button */}
       <AnimatePresence>

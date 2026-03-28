@@ -10,12 +10,12 @@ CineMash AI is a production-ready Next.js 16 application that uses artificial in
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Frontend      │    │    Backend      │    │   External      │
 │                 │    │                 │    │   Services      │
-│ Next.js 16      │◄──►│  API Routes     │◄──►│  • Groq AI      │
-│ React 19        │    │  Supabase       │    │  • OpenRouter   │
-│ TypeScript      │    │  PostgreSQL     │    │  • TMDB API     │
-│ Tailwind CSS    │    │  Real-time      │    │                 │
-│ Framer Motion   │    │  Rate Limiting  │    └─────────────────┘
-│ shadcn/ui       │    │  Token Budget   │
+│ Next.js 16      │◄──►│  Redis State    │◄──►│  • Groq AI      │
+│ React 19        │    │  Job Queue      │    │  • OpenRouter   │
+│ TypeScript      │    │  BG Worker      │    │  • TMDB API     │
+│ Tailwind CSS    │    │  Distributed RL │    │                 │
+│ Framer Motion   │    │                 │    └─────────────────┘
+│ shadcn/ui       │    │                 │
 └─────────────────┘    └─────────────────┘
          │                       │
          │              ┌─────────────────┐
@@ -48,11 +48,12 @@ CineMash AI is a production-ready Next.js 16 application that uses artificial in
 - **AI Services**: Groq LLaMA 3.3-70B (primary) + OpenRouter GPT-4o-mini (fallback)
 - **External APIs**: TMDB (The Movie Database) integration
 
-### Development Tools
+### Development & Ops
+- **Queue Management**: BullMQ for distributed task processing
+- **Distributed State**: Redis for global rate limiting and caching
 - **Package Management**: npm with custom scripts
-- **Code Quality**: ESLint with Next.js configuration
 - **Type Safety**: Strict TypeScript configuration
-- **Database Management**: Supabase Dashboard and migrations
+- **Database Management**: Supabase Dashboard and drizzle-kit
 
 ## Database Schema
 
@@ -159,70 +160,30 @@ CREATE TABLE movies (
 }
 ```
 
+### Job & Scaling API
+
 #### `POST /api/fuse`
-**Purpose**: Full-featured fusion generation with Groq + OpenRouter
+**Purpose**: Enqueue a movie fusion request
 **Features**:
-- Complete system prompt integration
-- Groq primary with OpenRouter fallback
-- Real token counting and budgeting
-- Comprehensive error handling
-- Production-ready AI integration
+- Input validation (2-4 movie IDs)
+- Atomically adds job to BullMQ `fusion-tasks` queue
+- Returns a `jobId` for client polling
+- Global rate-limit check via Redis
 
-### Gallery API
-
-#### `GET /api/gallery`
-**Purpose**: Browse and search fusions
+#### `GET /api/fuse/status/[jobId]`
+**Purpose**: Poll for result of a background job
 **Features**:
-- Pagination (50 items per page)
-- Search by title/content
-- Sort by upvotes or creation date
-- JSON response format
-
-#### `POST /api/gallery`
-**Purpose**: Save new fusion data
-**Features**:
-- Update existing fusions
-- Create new fusions
-- Data validation
-
-### Public Access API
-
-#### `GET /api/fusion/[shareToken]`
-**Purpose**: Public access to fusions
-**Features**:
-- Share token lookup
-- JSON data parsing
-- Error handling for missing fusions
-
-### Voting API
-
-#### `POST /api/vote`
-**Purpose**: Vote on fusions
-**Features**:
-- IP-based duplicate prevention
-- Upvote/downvote functionality
-- Atomic vote counting
-- Vote history tracking
-
-### Chat Refinement API
-
-#### `POST /api/chat/refine`
-**Purpose**: Live refinement of existing fusions
-**Features**:
-- Conversation history (last 4 messages)
-- Targeted AI refinement
-- Fusion data updates
-- Mock AI responses for development
-
-### Health Check API
+- Returns `queued`, `active`, `completed`, or `failed`
+- Provides AI result immediately upon completion
+- Error reporting for background failures
 
 #### `GET /api/health`
 **Purpose**: System health monitoring
 **Features**:
 - Database connectivity check
-- Token budget monitoring
+- Redis latency and memory report
+- Queue status (waiting/active count)
 - Environment variable validation
-- Service status reporting
 
 ### TMDB Proxy API
 
@@ -380,36 +341,27 @@ curl -X POST http://localhost:3000/api/vote \
 - **Focus Management**: Enhanced focus indicators with 3px thickness
 - **Skip Links**: Skip-to-main-content for keyboard users
 
-## Architecture Benefits
+## High-Concurrency Scaling (100+ Users)
 
-### Performance
-- **Edge Deployment**: Global CDN distribution via Vercel Edge Network
-- **Database Optimization**: Supabase connection pooling and indexing
-- **Caching Strategy**: TMDB API responses cached for 1 hour
-- **Code Splitting**: Dynamic imports for optimal loading
-- **Image Optimization**: Next.js Image component with automatic optimization
+CineMash AI is architected to handle large bursts of traffic while strictly adhering to AI provider rate limits.
 
-### Scalability
-- **Horizontal Scaling**: Stateless design for multiple server instances
-- **Database Scaling**: Supabase auto-scaling with read replicas
-- **API Rate Limiting**: Multi-layer protection against abuse
-- **Token Budgeting**: AI usage tracking prevents cost overruns
+### 🧵 Distributed Job Queue
+Instead of long-running synchronous requests, we use a **Task Queue (BullMQ)**:
+- **Serialization**: Requests are processed sequentially to prevent "429 Too Many Requests" during spikes.
+- **Failover**: Failed AI calls are automatically retried with exponential backoff.
+- **Polling**: The UI handles `202 Accepted` states and polls the status API for a silky-smooth user experience.
 
-### Security & Privacy
-- **API Key Protection**: All external API keys server-side only
-- **Anonymous Usage**: IP-based tracking without PII collection
-- **Input Validation**: Comprehensive Zod schema validation
-- **Rate Limiting**: Per-IP limits with database fallback
-- **XSS Protection**: Content Security Policy headers
+### ⚡ Redis-Backed Distributed Rate Limiting
+- **Global Tokens**: Unlike in-memory limiters, our Redis implementation tracks user usage across multiple server instances (e.g., in a Vercel/Kubernetes cluster).
+- **Atomic Counting**: Uses Redis `MULTI` and `INCR` for thread-safe state management.
 
-### Developer Experience
-- **Type Safety**: Full TypeScript coverage with strict mode
-- **Hot Reload**: Fast development with Next.js dev server
-- **Database UI**: Supabase Dashboard for data management
-- **Error Tracking**: Comprehensive logging and monitoring
-- **Documentation**: Complete technical and user documentation
+### 🏃 Running the Background Worker
+In a production environment, you should run the worker as a separate process. In development, use the provided script:
 
-This production-ready architecture provides CineMash AI with enterprise-grade security, performance, scalability, and accessibility compliance, ensuring a robust foundation for growth and user satisfaction.
+```bash
+# Start the background worker
+npx ts-node -P tsconfig.json -r tsconfig-paths/register scripts/worker-dev.ts
+```
 
 ## Redis Memory Optimization & Scaling Strategy
 

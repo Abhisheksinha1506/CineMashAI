@@ -233,7 +233,7 @@ export async function getTMDBFromSupabase(cacheKey: string): Promise<any | null>
     logTMDBCacheEvent('tmdb_cache_error', {
       cache_layer: 'supabase',
       cache_key: cacheKey,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : (typeof error === 'object' ? JSON.stringify(error) : String(error))
     });
     return null;
   }
@@ -266,7 +266,7 @@ export async function setTMDBInSupabase(cacheKey: string, data: any, ttl: number
     logTMDBCacheEvent('tmdb_cache_error', {
       cache_layer: 'supabase',
       cache_key: cacheKey,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : (typeof error === 'object' ? JSON.stringify(error) : String(error))
     });
   }
 }

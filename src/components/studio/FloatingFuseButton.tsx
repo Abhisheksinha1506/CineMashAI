@@ -6,14 +6,15 @@ import { Zap, Loader2 } from 'lucide-react';
 interface FloatingFuseButtonProps {
   selectedCount: number;
   isGenerating: boolean;
+  isRemixMode?: boolean;
   onFuse: () => void;
 }
 
-export function FloatingFuseButton({ selectedCount, isGenerating, onFuse }: FloatingFuseButtonProps) {
+export function FloatingFuseButton({ selectedCount, isGenerating, isRemixMode = false, onFuse }: FloatingFuseButtonProps) {
   const canFuse = selectedCount >= 2 && selectedCount <= 4 && !isGenerating;
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 z-40">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 z-50">
       <motion.button
         onClick={canFuse ? onFuse : undefined}
         whileHover={canFuse ? { scale: 1.05 } : undefined}
@@ -23,7 +24,7 @@ export function FloatingFuseButton({ selectedCount, isGenerating, onFuse }: Floa
           canFuse
             ? 'floating-fuse-button'
             : 'floating-fuse-button disabled'
-        } dark:text-black light:text-[var(--background)] dark:bg-[var(--primary)] light:bg-[var(--primary)] light:shadow-[0_4px_20px_rgba(0,212,255,0.4)]`}
+        }`}
         title={!canFuse ? selectedCount < 2 ? 'Select at least 2 movies' : 'Maximum 4 movies allowed' : undefined}
       >
         {/* Progress ring when loading */}
@@ -67,7 +68,7 @@ export function FloatingFuseButton({ selectedCount, isGenerating, onFuse }: Floa
           ) : (
             <>
               <Zap className="h-4 w-4" />
-              <span>FUSE NOW</span>
+              <span>{isRemixMode ? 'CREATE REMIX' : 'FUSE NOW'}</span>
             </>
           )}
         </div>

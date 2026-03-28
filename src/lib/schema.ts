@@ -11,7 +11,9 @@ export const movies = {
     poster_path: 'TEXT',
     release_date: 'TEXT',
     vote_average: 'REAL',
+    popularity: 'REAL',
     genre_ids: 'TEXT', // JSON array
+    cast: 'TEXT', // JSON array of actor objects
     created_at: 'TIMESTAMP DEFAULT NOW()'
   }
 };
@@ -24,6 +26,7 @@ export const fusions = {
     share_token: 'TEXT UNIQUE NOT NULL',
     movie_ids: 'TEXT NOT NULL', // JSON array of TMDB movie objects
     fusion_data: 'TEXT NOT NULL', // Full AI response as JSON
+    source_movies: 'TEXT', // JSON array of complete movie objects for remix
     ip_hash: 'TEXT', // for anonymous tracking
     created_at: 'TIMESTAMP DEFAULT NOW()',
     upvotes: 'INTEGER DEFAULT 0'
@@ -53,6 +56,20 @@ export const tokenUsage = {
   }
 };
 
+// TMDB Cache Table - matches technical documentation
+export const tmdbCache = {
+  name: 'tmdb_cache',
+  columns: {
+    id: 'UUID PRIMARY KEY DEFAULT gen_random_uuid()',
+    cache_key: 'TEXT UNIQUE NOT NULL',
+    response_data: 'JSONB NOT NULL',
+    expires_at: 'TIMESTAMP WITH TIME ZONE NOT NULL',
+    created_at: 'TIMESTAMP WITH TIME ZONE DEFAULT NOW()',
+    access_count: 'INTEGER DEFAULT 1',
+    last_accessed: 'TIMESTAMP WITH TIME ZONE DEFAULT NOW()'
+  }
+};
+
 // TypeScript types matching exact database schema
 export interface Movie {
   id: string;
@@ -62,7 +79,9 @@ export interface Movie {
   poster_path: string | null;
   release_date: string;
   vote_average: number;
+  popularity: number;
   genre_ids: number[];
+  cast: any[];
   created_at: string;
 }
 
@@ -71,6 +90,7 @@ export interface Fusion {
   share_token: string;
   movie_ids: string; // JSON string
   fusion_data: string; // JSON string
+  source_movies: string; // JSON string of complete movie objects
   ip_hash: string | null;
   created_at: string;
   upvotes: number;
@@ -89,6 +109,16 @@ export interface TokenUsage {
   user_id: string;
   date: string; // YYYY-MM-DD
   tokens_used: number;
+}
+
+export interface TMDBCacheEntry {
+  id: string;
+  cache_key: string;
+  response_data: string | any;
+  expires_at: string;
+  created_at: string;
+  access_count: number;
+  last_accessed: string;
 }
 
 // Insert types

@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Heart, Eye, Sparkles, Film } from 'lucide-react';
 import { getMoviePosterUrl } from '@/lib/api/tmdb-client';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 
 interface GalleryFusionCardProps {
   id: string;
@@ -20,6 +20,7 @@ interface GalleryFusionCardProps {
   suggestedCast?: any[];
   onRemix?: () => void;
   onVoteUpdate?: (newUpvotes: number) => void;
+  onClick?: () => void;
 }
 
 export function GalleryFusionCard({
@@ -36,6 +37,7 @@ export function GalleryFusionCard({
   suggestedCast,
   onRemix,
   onVoteUpdate,
+  onClick,
 }: GalleryFusionCardProps) {
   const [currentUpvotes, setCurrentUpvotes] = useState(upvotes);
   const [isVoting, setIsVoting] = useState(false);
@@ -50,9 +52,19 @@ export function GalleryFusionCard({
     e.preventDefault();
     e.stopPropagation();
     
-    if (isVoting || hasVoted) return;
+    if (hasVoted) {
+      toast.error('You already upvoted this fusion!');
+      return;
+    }
+    
+    if (isVoting) return;
 
+    // Optimistic Update
     setIsVoting(true);
+    setHasVoted(true);
+    const previousUpvotes = currentUpvotes;
+    setCurrentUpvotes(prev => prev + 1);
+
     try {
       const response = await fetch('/api/vote', {
         method: 'POST',
@@ -67,11 +79,17 @@ export function GalleryFusionCard({
       if (result.success) {
         const newUpvotes = result.data.newUpvotes;
         setCurrentUpvotes(newUpvotes);
-        setHasVoted(true);
         onVoteUpdate?.(newUpvotes);
+      } else {
+        // Rollback
+        setHasVoted(false);
+        setCurrentUpvotes(previousUpvotes);
       }
     } catch (error) {
       console.error('Vote error:', error);
+      // Rollback
+      setHasVoted(false);
+      setCurrentUpvotes(previousUpvotes);
     } finally {
       setIsVoting(false);
     }
@@ -84,109 +102,68 @@ export function GalleryFusionCard({
     <motion.div
       whileHover={{ y: -4 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
+      onClick={onClick}
       className="group relative rounded-2xl overflow-hidden border border-white/[0.06] hover:border-[#00f0ff]/20 transition-all duration-400 bg-[#0c0c0e] hover:shadow-[0_8px_40px_rgba(0,240,255,0.08)] cursor-pointer"
     >
       {/* Subtle top glow line on hover */}
       <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#00f0ff]/0 to-transparent group-hover:via-[#00f0ff]/30 transition-all duration-500" />
 
       {/* Collage Header */}
-      <Link href={`/fusion/${share_token}`}>
-        <div className="relative h-44 overflow-hidden">
-          {/* Split poster collage */}
-          <div className="absolute inset-0 flex">
-            <div className="flex-1 relative overflow-hidden">
-              <img
-                src={getMoviePosterUrl(movie1.poster_path, 'w342')}
-                alt={movie1.title}
-                className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-110"
-              />
+      <div className="relative h-44 overflow-hidden">
+          {/* Coming Soon Placeholder */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900/80 to-black">
+            <div className="w-12 h-12 rounded-full border border-white/5 bg-black/40 flex items-center justify-center mb-3 shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+              <Film className="h-5 w-5 text-[#00f0ff]/40" />
             </div>
-            {movie3 ? (
-              <>
-                <div className="flex-1 relative overflow-hidden">
-                  <img
-                    src={getMoviePosterUrl(movie2.poster_path, 'w342')}
-                    alt={movie2.title}
-                    className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-110"
-                  />
-                </div>
-                <div className="flex-1 relative overflow-hidden">
-                  <img
-                    src={getMoviePosterUrl(movie3.poster_path, 'w342')}
-                    alt={movie3.title}
-                    className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-110"
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 relative overflow-hidden">
-                <img
-                  src={getMoviePosterUrl(movie2.poster_path, 'w342')}
-                  alt={movie2.title}
-                  className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-110"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Divider lines between posters */}
-          <div className="absolute inset-0 flex pointer-events-none">
-            <div className="flex-1" />
-            <div className="w-[1px] bg-black/60" />
-            <div className="flex-1" />
+            <div className="px-3 py-1.5 rounded-full border border-[#00f0ff]/10 bg-[#00f0ff]/5 backdrop-blur-sm">
+              <p className="text-[8px] font-black text-[#00f0ff]/70 uppercase tracking-[0.2em]">
+                Movie Poster Coming Soon
+              </p>
+            </div>
           </div>
 
           {/* Gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0c0c0e] via-[#0c0c0e]/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0c0c0e] via-transparent to-transparent" />
 
           {/* Fusion × badge */}
           <div className="absolute top-3 left-3 flex items-center gap-1.5">
             {sourceMovies.slice(0, 3).map((m: any, i: number) => (
-              <span key={i} className="text-[10px] font-black text-white/50 uppercase tracking-wider bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded">
+              <span key={i} className="text-xs font-black text-white/60 uppercase tracking-wider bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded">
                 {m.title?.split(' ')[0]}
               </span>
             ))}
           </div>
 
-          {/* Title overlay (appears on hover) */}
-          <div className="absolute inset-0 flex items-end p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <h3 className="text-white font-black text-base leading-tight uppercase tracking-tight line-clamp-2" style={{ textShadow: '0 0 15px rgba(0,240,255,0.5)' }}>
-              {title}
-            </h3>
-          </div>
-
-          {/* View counts removed to prevent hydration mismatches */}
         </div>
-      </Link>
 
       {/* Content */}
       <div className="p-4 space-y-3">
         {/* Title always visible */}
         <div>
-          <h4 className="text-white font-black text-[14px] leading-tight uppercase tracking-tight line-clamp-1">
+          <h4 className="text-white font-black text-base leading-tight uppercase tracking-tight line-clamp-1">
             {title}
           </h4>
-          <p className="text-zinc-500 text-[11px] italic line-clamp-1 mt-0.5">
+          <p className="text-zinc-400 text-sm italic line-clamp-1 mt-0.5">
             {tagline}
           </p>
         </div>
 
         {/* Synopsis preview */}
         {synopsis && (
-          <p className="text-zinc-400 text-[11px] line-clamp-2 leading-relaxed">
+          <p className="text-zinc-400 text-sm line-clamp-2 leading-relaxed">
             {synopsis}
           </p>
         )}
 
         {/* Metadata counts */}
-        <div className="flex items-center gap-3 text-[10px] text-zinc-600">
-          {keyScenes && (
+        <div className="flex items-center gap-3 text-xs text-zinc-500">
+          {keyScenes && keyScenes.length > 0 && (
             <span className="flex items-center gap-1">
               <Film className="h-3 w-3" />
               {keyScenes.length} scenes
             </span>
           )}
-          {suggestedCast && (
+          {suggestedCast && suggestedCast.length > 0 && (
             <span className="flex items-center gap-1">
               <Sparkles className="h-3 w-3" />
               {suggestedCast.length} cast
@@ -199,20 +176,20 @@ export function GalleryFusionCard({
           {/* Stats */}
           <div className="flex items-center gap-3">
             <button
-              className={`flex items-center gap-1.5 text-[11px] transition-colors group/heart ${
+              className={`flex items-center gap-1.5 text-sm transition-colors group/heart ${
                 hasVoted 
                   ? 'text-[#ff00aa]' 
                   : 'text-zinc-500 hover:text-[#ff00aa]'
               } ${isVoting ? 'opacity-50 cursor-not-allowed' : ''}`}
               onClick={handleVote}
-              disabled={isVoting || hasVoted}
+              disabled={isVoting}
               aria-label={hasVoted ? `Already upvoted ${title}` : `Upvote ${title}`}
               title={hasVoted ? 'Already upvoted' : 'Upvote this fusion'}
             >
-              <Heart className={`h-3 w-3 ${hasVoted ? 'fill-current' : ''} group-hover/heart:scale-125 transition-transform ${isVoting ? 'animate-pulse' : ''}`} />
+              <Heart className={`h-4 w-4 ${hasVoted ? 'fill-current' : ''} group-hover/heart:scale-125 transition-transform ${isVoting ? 'animate-pulse' : ''}`} />
               <span className="font-bold">{currentUpvotes}</span>
             </button>
-            <span className="text-[10px] text-zinc-600 font-medium">
+            <span className="text-xs text-zinc-500 font-medium">
               {new Date(createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </span>
           </div>
@@ -226,9 +203,10 @@ export function GalleryFusionCard({
               e.stopPropagation();
               onRemix?.();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#ff00aa]/10 border border-[#ff00aa]/20 text-[#ff00aa] text-[11px] font-black uppercase tracking-wide hover:bg-[#ff00aa]/15 transition-all"
+            title="Create a new fusion based on this one"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#ff00aa]/10 border border-[#ff00aa]/20 text-[#ff00aa] text-xs font-black uppercase tracking-wide hover:bg-[#ff00aa]/15 transition-all"
           >
-            <Sparkles className="h-3 w-3" />
+            <Sparkles className="h-3.5 w-3.5" />
             Remix
           </motion.button>
         </div>

@@ -16,7 +16,7 @@ async function test() {
     console.log('Title:', fusion.title);
     console.log('Tagline:', fusion.tagline);
     console.log('Scenes count:', fusion.key_scenes.length);
-    console.log('Cast count:', fusion.suggested_cast.length);
+    console.log('Cast count:', fusion.suggestedCast.length);
     console.log('Box Office Vibe:', fusion.box_office_vibe);
   } catch (error) {
     console.error('❌ Verification failed:', error);

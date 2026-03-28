@@ -22,6 +22,8 @@ async function tmdbFetch(endpoint: string, params: Record<string, any> = {}): Pr
       'Content-Type': 'application/json',
       'User-Agent': 'CineMash-AI/1.0',
     },
+    // Server-side caching for 1 hour
+    next: { revalidate: 3600 },
   });
 
   if (!response.ok) {

@@ -1,13 +1,6 @@
 import { NextRequest } from 'next/server';
-import { supabaseServer } from '@/lib/supabase-server';
 import { hashIP } from '@/lib/utils';
-import crypto from 'crypto';
-
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-  lastAccess: number;
-}
+import { getRedisClient, KEY_PREFIXES, getTTL } from '@/lib/redis';
 
 interface RateLimitResult {
   allowed: boolean;
@@ -17,172 +10,68 @@ interface RateLimitResult {
   retryAfter?: number;
 }
 
-// In-memory rate limit cache
-const rateLimitCache = new Map<string, RateLimitEntry>();
 const RATE_LIMIT_PER_MINUTE = parseInt(process.env.RATE_LIMIT_PER_MINUTE || '20');
-const RATE_LIMIT_MEMORY_LIMIT = parseInt(process.env.RATE_LIMIT_MEMORY_LIMIT || '10000');
-const RATE_LIMIT_CLEANUP_INTERVAL = parseInt(process.env.RATE_LIMIT_CLEANUP_INTERVAL || '60');
-const WINDOW_SIZE = 60 * 1000; // 1 minute in milliseconds
+const WINDOW_SIZE = 60; // 1 minute in seconds for Redis EXPIRE
 
-// Cleanup expired entries periodically
-const cleanupRateLimitCache = () => {
-  const now = Date.now();
-  for (const [key, entry] of rateLimitCache.entries()) {
-    if (now > entry.resetTime) {
-      rateLimitCache.delete(key);
-    }
-  }
-  
-  // Remove oldest entries if cache is too large
-  if (rateLimitCache.size > RATE_LIMIT_MEMORY_LIMIT) {
-    const entries = Array.from(rateLimitCache.entries());
-    entries.sort((a, b) => a[1].lastAccess - b[1].lastAccess);
-    const toDelete = entries.slice(0, rateLimitCache.size - RATE_LIMIT_MEMORY_LIMIT);
-    toDelete.forEach(([key]) => rateLimitCache.delete(key));
-  }
-};
-
-// Start cleanup interval
-if (typeof setInterval !== 'undefined') {
-  setInterval(cleanupRateLimitCache, RATE_LIMIT_CLEANUP_INTERVAL * 1000);
-}
-
-// Fallback to database when memory cache is not available
-async function getRateLimitFromDB(ipHash: string): Promise<RateLimitEntry | null> {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    
-    const { data: usageData, error: selectError } = await supabaseServer
-      .from('token_usage')
-      .select('*')
-      .eq('user_id', ipHash)
-      .eq('date', today)
-      .limit(1);
-    
-    if (selectError) throw selectError;
-    const usage = usageData?.[0];
-    
-    if (!usage) {
-      return null;
-    }
-    
-    // Rough approximation of rate limit based on token usage
-    const estimatedRequests = Math.floor((usage.tokens_used || 0) / 1000); 
-    
-    return {
-      count: estimatedRequests,
-      resetTime: Date.now() + WINDOW_SIZE,
-      lastAccess: Date.now()
-    };
-  } catch (error) {
-    console.error('Rate limit DB fallback error:', error);
-    return null;
-  }
-}
-
-// Save rate limit to database (fallback/persistence)
-async function saveRateLimitToDB(ipHash: string, entry: RateLimitEntry): Promise<void> {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Get existing to determine if insert or update
-    const { data: existing } = await supabaseServer
-      .from('token_usage')
-      .select('tokens_used')
-      .eq('user_id', ipHash)
-      .eq('date', today)
-      .limit(1);
-      
-    if (existing && existing.length > 0) {
-      // Update
-      const newTokens = (existing[0].tokens_used || 0) + 1000;
-      await supabaseServer
-        .from('token_usage')
-        .update({ tokens_used: newTokens })
-        .eq('user_id', ipHash)
-        .eq('date', today);
-    } else {
-      // Insert
-      await supabaseServer
-        .from('token_usage')
-        .insert({
-          id: crypto.randomUUID(),
-          user_id: ipHash,
-          date: today,
-          tokens_used: 1000
-        });
-    }
-  } catch (error) {
-    console.error('Rate limit DB save error:', error);
-  }
-}
-
+/**
+ * Checks the rate limit for a given request using Redis.
+ * Uses an atomic INCR and EXPIRE strategy for distributed consistency.
+ */
 export async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
   const ipHash = hashIP(request);
-  const now = Date.now();
+  const redis = getRedisClient();
+  const key = `${KEY_PREFIXES.RATE}${ipHash}`;
   
-  // Check memory cache first
-  let entry = rateLimitCache.get(ipHash);
-  
-  if (!entry) {
-    // Try to get from database as fallback
-    const dbEntry = await getRateLimitFromDB(ipHash);
-    if (dbEntry) {
-      entry = dbEntry;
-    }
+  try {
+    // Multi-command atomic check
+    const multi = redis.multi();
+    multi.incr(key);
+    multi.ttl(key);
     
-    if (entry && now < entry.resetTime) {
-      rateLimitCache.set(ipHash, entry);
-    } else {
-      // Create new entry
-      entry = {
-        count: 0,
-        resetTime: now + WINDOW_SIZE,
-        lastAccess: now
+    const results = await multi.exec();
+    if (!results || !results[0] || !results[1]) {
+        throw new Error('Redis multi-exec failed');
+    }
+
+    const [incrErr, count] = results[0] as [Error | null, number];
+    const [ttlErr, ttl] = results[1] as [Error | null, number];
+
+    if (incrErr || ttlErr) throw incrErr || ttlErr;
+
+    // Set expiration on first request in the window
+    if (count === 1 || ttl === -1) {
+      await redis.expire(key, WINDOW_SIZE);
+    }
+
+    const remaining = Math.max(0, RATE_LIMIT_PER_MINUTE - count);
+    const resetTime = Date.now() + (ttl > 0 ? ttl : WINDOW_SIZE) * 1000;
+
+    if (count > RATE_LIMIT_PER_MINUTE) {
+      return {
+        allowed: false,
+        limit: RATE_LIMIT_PER_MINUTE,
+        remaining: 0,
+        resetTime,
+        retryAfter: ttl > 0 ? ttl : WINDOW_SIZE
       };
     }
-  }
-  
-  // Check if window has expired
-  if (now > entry.resetTime) {
-    entry.count = 0;
-    entry.resetTime = now + WINDOW_SIZE;
-  }
-  
-  // Update last access time
-  entry.lastAccess = now;
-  
-  // Check if rate limit exceeded
-  if (entry.count >= RATE_LIMIT_PER_MINUTE) {
-    // Save to database for persistence
-    await saveRateLimitToDB(ipHash, entry);
-    
+
     return {
-      allowed: false,
+      allowed: true,
       limit: RATE_LIMIT_PER_MINUTE,
-      remaining: 0,
-      resetTime: entry.resetTime,
-      retryAfter: Math.ceil((entry.resetTime - now) / 1000)
+      remaining,
+      resetTime
+    };
+  } catch (error) {
+    console.error('[RateLimit] Redis error, falling back to permissive mode:', error);
+    // Permissive fallback so users aren't blocked if Redis is down
+    return {
+      allowed: true,
+      limit: RATE_LIMIT_PER_MINUTE,
+      remaining: 1,
+      resetTime: Date.now() + WINDOW_SIZE * 1000
     };
   }
-  
-  // Increment count
-  entry.count++;
-  
-  // Save to cache
-  rateLimitCache.set(ipHash, entry);
-  
-  // Save to database periodically (every 10 requests)
-  if (entry.count % 10 === 0) {
-    await saveRateLimitToDB(ipHash, entry);
-  }
-  
-  return {
-    allowed: true,
-    limit: RATE_LIMIT_PER_MINUTE,
-    remaining: RATE_LIMIT_PER_MINUTE - entry.count,
-    resetTime: entry.resetTime
-  };
 }
 
 export function getRateLimitHeaders(result: RateLimitResult): Record<string, string> {
@@ -218,7 +107,7 @@ export function createRateLimitResponse(result: RateLimitResult): Response {
   );
 }
 
-// Get client IP address from request
+// Get client IP address from request (Exporting for utilities)
 export function getClientIP(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
   const realIP = request.headers.get('x-real-ip');
@@ -234,7 +123,9 @@ export function getClientIP(request: NextRequest): string {
   return 'unknown';
 }
 
-// Rate limit middleware for API routes
+/**
+ * Higher-order function to wrap API handlers with rate limiting.
+ */
 export function withRateLimit(handler: (req: NextRequest) => Promise<Response>) {
   return async (request: NextRequest) => {
     try {
@@ -254,8 +145,8 @@ export function withRateLimit(handler: (req: NextRequest) => Promise<Response>) 
       
       return response;
     } catch (error) {
-      console.error('Rate limit middleware error:', error);
-      throw error;
+      console.error('[RateLimit] Middleware error:', error);
+      return handler(request); // Still try to serve if limiter breaks
     }
   };
 }

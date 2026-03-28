@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface TrendingSidebarProps {
   trendingFusions?: any[];
-  onRemix?: (id: string) => void;
+  onRemix?: (share_token: string) => void;
 }
 
 export function TrendingSidebar({ trendingFusions = [], onRemix }: TrendingSidebarProps) {
@@ -80,7 +80,7 @@ export function TrendingSidebar({ trendingFusions = [], onRemix }: TrendingSideb
 
                     {/* Remix button */}
                     <button
-                      onClick={() => onRemix?.(fusion.id)}
+                      onClick={() => onRemix?.(fusion.share_token)}
                       className="w-full mt-2 px-3 py-2 bg-[var(--primary)]/10 border border-[var(--primary)]/20 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-[var(--primary)]/20 transition-all focus-ring"
                     >
                       Remix
@@ -160,7 +160,7 @@ export function TrendingSidebar({ trendingFusions = [], onRemix }: TrendingSideb
                     >
                       <GalleryFusionCard
                         {...fusion}
-                        onRemix={() => onRemix?.(fusion.id)}
+                        onRemix={() => onRemix?.(fusion.share_token)}
                       />
                     </motion.div>
                   ))}
