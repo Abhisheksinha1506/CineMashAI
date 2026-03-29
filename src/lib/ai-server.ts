@@ -109,17 +109,44 @@ export async function generateFusionDetails(
     const aiResponse = await callChatAI(userPrompt, systemPrompt);
     const result = JSON.parse(aiResponse);
 
-    // Map AI suggested cast back to TMDB profiling
+    // Map AI suggested cast back to TMDB profiling with enhanced validation
     const refinedCast = result.suggestedCast.map((c: any, i: number) => {
       const originalActor = availableActors.find(a => a.name === c.name || a.id.toString() === c.actorId?.toString());
+      
+      // Ensure we have a valid headshot URL
+      let headshotUrl = `https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop`;
+      
+      if (originalActor?.profile_path) {
+        const tmdbUrl = getMoviePosterUrl(originalActor.profile_path, 'h632');
+        // Validate the URL format
+        if (tmdbUrl && tmdbUrl.startsWith('https://image.tmdb.org/')) {
+          headshotUrl = tmdbUrl;
+        }
+      }
+      
       return {
         ...c,
         id: originalActor?.id?.toString() || (i + 1).toString(),
-        headshotUrl: originalActor?.profile_path 
-          ? getMoviePosterUrl(originalActor.profile_path, 'h632') 
-          : `https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop`
+        actorId: originalActor?.id || c.actorId,
+        headshotUrl: headshotUrl,
+        // Ensure all required fields are present
+        name: c.name || 'Unknown Actor',
+        role: c.role || 'TBD',
+        reason: c.reason || c.why_fit || 'Perfect fit for this role',
+        why_fit: c.why_fit || c.reason || 'Perfect fit for this role'
       };
     });
+
+    // Validate cast data structure
+    const validatedCast = refinedCast.filter((castMember: any) => {
+      return castMember.name && 
+             castMember.role && 
+             castMember.headshotUrl && 
+             castMember.headshotUrl !== '' &&
+             castMember.headshotUrl.startsWith('http');
+    });
+
+    console.log(`[AI Server] Cast enrichment: ${validatedCast.length}/${refinedCast.length} cast members with valid headshots`);
 
     return {
       ...result,
@@ -131,6 +158,7 @@ export async function generateFusionDetails(
         imageUrl: `https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=800&auto=format&fit=crop`
       })),
       suggestedCast: refinedCast,
+      suggested_cast: refinedCast, // Ensure both formats are available
       // Provide defaults for removed fields to satisfy TypeScript until components are updated
       runtime: 0,
       rating: 'N/A',

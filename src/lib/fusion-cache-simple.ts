@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { getRedisClient, KEY_PREFIXES, sanitizeKey } from './redis';
 import { memoryCache, CACHE_CONFIGS } from './cache';
 import { generateShareToken } from './ai-server';
+import { serializationPool } from './cache';
 
 // Generate theme-agnostic cache key for fusion request
 export function generateFusionCacheKey(
@@ -17,13 +18,13 @@ export function generateFusionCacheKey(
     constraints: constraints || ''
   };
   
-  // Generate SHA-256 hash
-  const inputString = JSON.stringify(fusionInput);
-  const hash = crypto.createHash('sha256').update(inputString).digest('hex');
+  // Optimized hash generation without JSON.stringify
+  const hashInput = `ids:${normalizedMovieIds.join(',')}|constraints:${constraints || ''}`;
+  const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
   return sanitizeKey(`${KEY_PREFIXES.FUSION}${hash}`);
 }
 
-// Get cached fusion from Redis/Memory
+// Get cached fusion from Redis/Memory with optimized serialization
 export async function getCachedFusion(
   movieIds: number[],
   constraints?: string
@@ -46,12 +47,12 @@ export async function getCachedFusion(
     const redis = getRedisClient();
     const result = await redis.get(cacheKey);
     if (result) {
-      const entry = JSON.parse(result);
+      const entry = serializationPool.deserialize(result);
       
       entry.hitCount = (entry.hitCount || 0) + 1;
       
-      // Update hit count in Redis anonymously (fire and forget)
-      redis.set(cacheKey, JSON.stringify(entry), 'KEEPTTL').catch(() => {});
+      // Update hit count in Redis asynchronously
+      redis.set(cacheKey, serializationPool.serialize(entry), 'KEEPTTL').catch(() => {});
       
       // Populate Memory
       memoryCache.set(cacheKey, entry, CACHE_CONFIGS.FUSION_GENERATION.ttl);
@@ -70,7 +71,7 @@ export async function getCachedFusion(
   }
 }
 
-// Cache fusion result in Redis/Memory
+// Cache fusion result in Redis/Memory with optimized serialization
 export async function cacheFusion(
   movieIds: number[],
   constraints: string | undefined,
@@ -94,7 +95,7 @@ export async function cacheFusion(
     const redis = getRedisClient();
     await redis.set(
       cacheKey, 
-      JSON.stringify(entry), 
+      serializationPool.serialize(entry), 
       'EX', 
       CACHE_CONFIGS.FUSION_GENERATION.ttl
     );

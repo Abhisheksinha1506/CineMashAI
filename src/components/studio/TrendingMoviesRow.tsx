@@ -29,9 +29,8 @@ export function TrendingMoviesRow({ trendingMovies, onMovieSelect, selectedMovie
             transition={{ delay: idx * 0.1 }}
             onClick={() => !isSelected(movie) && onMovieSelect(movie)}
             disabled={isSelected(movie)}
-            className={`trending-poster relative focus-ring ${
-              isSelected(movie) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-            }`}
+            className={`trending-poster relative focus-ring ${isSelected(movie) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              }`}
             aria-label={`Select ${movie.title}`}
           >
             <Image
@@ -45,7 +44,7 @@ export function TrendingMoviesRow({ trendingMovies, onMovieSelect, selectedMovie
               blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A8A"
               placeholder="blur"
             />
-            
+
             {/* Title Overlay */}
             <div className="trending-poster-overlay">
               <div className="text-left">

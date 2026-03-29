@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clapperboard, Zap, Film, Loader2, ChevronLeft, ChevronRight, X, ArrowLeft, Sparkles } from 'lucide-react';
 import { Movie, FusionResult, ChatMessage } from '@/types';
 import { getMoviePosterUrl } from '@/lib/api/tmdb-client';
-import { FusionResultCard } from './FusionResultCard';
+import FusionResultCard from './FusionResultCard';
 import { TrendingMoviesRow } from './TrendingMoviesRow';
 import { SimpleVerticalCarousel } from './SimpleVerticalCarousel';
 import { RefinementChat } from './RefinementChat';
@@ -29,7 +29,47 @@ interface CreativeCanvasProps {
   onFusionUpdate?: (updatedFusion: FusionResult) => void;
 }
 
-export function CreativeCanvas({
+// Memoized movie selector component
+const MovieSelector = memo(({ 
+  movie, 
+  onSelect, 
+  onRemove 
+}: { 
+  movie: Movie; 
+  onSelect: (movie: Movie) => void; 
+  onRemove: (movieId: string) => void;
+}) => (
+  <motion.div
+    key={movie.id}
+    initial={{ opacity: 0, scale: 0.8 }}
+    animate={{ opacity: 1, scale: 1 }}
+    exit={{ opacity: 0, scale: 0.8 }}
+    className="relative group"
+  >
+    <div className="relative w-32 h-48 rounded-lg overflow-hidden bg-white/[0.05] border border-white/[0.1]">
+      {movie.poster_path && (
+        <Image
+          src={getMoviePosterUrl(movie.poster_path, 'w342')}
+          alt={movie.title}
+          fill
+          className="object-cover"
+          sizes="128px"
+        />
+      )}
+      <button
+        onClick={() => onRemove(movie.id)}
+        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+    <p className="text-xs text-white/80 text-center mt-2 line-clamp-2">{movie.title}</p>
+  </motion.div>
+));
+
+MovieSelector.displayName = 'MovieSelector';
+
+const CreativeCanvas = memo(({
   selectedMovies,
   fusionResult,
   trendingMovies,
@@ -44,7 +84,7 @@ export function CreativeCanvas({
   onReset,
   onFuse,
   onFusionUpdate,
-}: CreativeCanvasProps) {
+}: CreativeCanvasProps) => {
   const [generationTime, setGenerationTime] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isChatMinimized, setIsChatMinimized] = useState(false);
@@ -94,7 +134,7 @@ export function CreativeCanvas({
           />
         </motion.div>
       </div>
-      
+
       {/* Loading text with typewriter effect */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -121,7 +161,7 @@ export function CreativeCanvas({
     <div className="relative min-h-screen flex flex-col">
       {/* Film-grain watermark background */}
       <div className="absolute inset-0 film-grain-texture opacity-[0.02] pointer-events-none" />
-      
+
       {/* Subtle film-reel watermark */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 opacity-[0.03] pointer-events-none">
         <div className="relative w-full h-full">
@@ -131,7 +171,7 @@ export function CreativeCanvas({
         </div>
       </div>
 
-      
+
       {/* Trending movies moved to sides of selection grid below */}
 
       {/* Main Content Area */}
@@ -169,7 +209,7 @@ export function CreativeCanvas({
                   <ArrowLeft className="h-4 w-4" />
                   Start New Production
                 </button>
-                
+
                 {/* Generation Badge */}
                 <motion.div
                   initial={{ opacity: 0, y: -20 }}
@@ -184,7 +224,7 @@ export function CreativeCanvas({
                     </span>
                   </div>
                 </motion.div>
-                
+
                 <div className="w-32" /> {/* Spacer to balance layout */}
               </div>
 
@@ -204,8 +244,9 @@ export function CreativeCanvas({
                 share_token={fusionResult.share_token || ''}
                 sourceMovies={fusionResult.sourceMovies}
                 onRegenerate={onRegenerate}
+                onBackToStudio={onReset}
               />
-              
+
               {/* Refinement Chat removed as requested */}
             </motion.div>
           ) : (
@@ -243,8 +284,8 @@ export function CreativeCanvas({
                   </h2>
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-white/5 border border-white/10 rounded-full">
                     <span className="flex items-center gap-1.5 text-[var(--primary)]">
-                       <span className="w-1.5 h-1.5 bg-[var(--primary)] rounded-full animate-pulse" />
-                       DIRECT
+                      <span className="w-1.5 h-1.5 bg-[var(--primary)] rounded-full animate-pulse" />
+                      DIRECT
                     </span>
                     <span className="w-px h-2 bg-zinc-700" />
                     <span className="text-zinc-600">FUSE</span>
@@ -253,7 +294,7 @@ export function CreativeCanvas({
                   </div>
                 </div>
                 <p className="text-sm sm:text-base text-zinc-400 dark:text-zinc-400 light:text-zinc-500 max-w-xl mx-auto">
-                  {isRemixMode 
+                  {isRemixMode
                     ? `Expand "${remixFusionData?.fusionData?.title || 'this fusion'}" with 1-3 more movies.`
                     : 'Choose 2-4 films to create your fusion.'
                   }
@@ -269,7 +310,7 @@ export function CreativeCanvas({
               >
                 {/* Left Side Trending Column */}
                 {trendingMovies.length > 0 && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.5 }}
@@ -302,11 +343,10 @@ export function CreativeCanvas({
                                 initial={{ opacity: 0, scale: 0.9, rotateY: 90 }}
                                 animate={{ opacity: 1, scale: 1, rotateY: 0 }}
                                 exit={{ opacity: 0, scale: 0.9, rotateY: -90 }}
-                                className={`aspect-poster relative rounded-2xl overflow-hidden border-2 ${
-                                  movie.isFusion 
-                                    ? 'border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.3)]' 
-                                    : 'border-[var(--primary)] shadow-[0_0_20px_rgba(0,240,255,0.2)]'
-                                }`}
+                                className={`aspect-poster relative rounded-2xl overflow-hidden border-2 ${movie.isFusion
+                                  ? 'border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.3)]'
+                                  : 'border-[var(--primary)] shadow-[0_0_20px_rgba(0,240,255,0.2)]'
+                                  }`}
                               >
                                 {movie.isFusion ? (
                                   // Fusion movie placeholder
@@ -338,14 +378,14 @@ export function CreativeCanvas({
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                                   </>
                                 )}
-                                
+
                                 {/* Fusion Badge */}
                                 {movie.isFusion && (
                                   <div className="absolute top-2 left-2 px-2 py-1 bg-purple-500/20 border border-purple-500/30 rounded text-[8px] text-purple-300 font-black uppercase tracking-widest">
                                     FUSION
                                   </div>
                                 )}
-                                
+
                                 <button
                                   onClick={() => onMovieRemove(movie.id)}
                                   className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white hover:bg-[var(--secondary)] hover:border-transparent transition-all"
@@ -353,7 +393,7 @@ export function CreativeCanvas({
                                 >
                                   <X className="h-4 w-4" />
                                 </button>
-                                
+
                                 {!movie.isFusion && (
                                   <div className="absolute bottom-0 left-0 right-0 p-3">
                                     <p className="text-white text-[10px] font-black uppercase tracking-tight line-clamp-1">
@@ -384,7 +424,7 @@ export function CreativeCanvas({
 
                 {/* Right Side Trending Column */}
                 {trendingMovies.length > 0 && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.5 }}
@@ -426,8 +466,8 @@ export function CreativeCanvas({
                         disabled={!!isGenerating}
                         className={cn(
                           "group relative px-10 py-3 rounded-full text-[14px] font-black uppercase tracking-widest transition-all duration-500 overflow-hidden",
-                          isGenerating 
-                            ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" 
+                          isGenerating
+                            ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
                             : "bg-gradient-to-r from-[var(--primary)] to-cyan-400 text-black shadow-[0_0_30px_rgba(0,240,255,0.3)] hover:shadow-[0_0_50px_rgba(0,240,255,0.5)]"
                         )}
                       >
@@ -444,7 +484,7 @@ export function CreativeCanvas({
                             </>
                           )}
                         </div>
-                        
+
                         {/* Animated Glow Effect */}
                         {!isGenerating && (
                           <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -469,4 +509,8 @@ export function CreativeCanvas({
       </div>
     </div>
   );
-}
+});
+
+CreativeCanvas.displayName = 'CreativeCanvas';
+
+export default CreativeCanvas;

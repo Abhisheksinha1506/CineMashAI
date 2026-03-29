@@ -1,12 +1,11 @@
-import { unstable_cache } from 'next/cache';
-import { supabaseServer } from '@/lib/supabase-server';
+import { getRedisClient, KEY_PREFIXES } from './redis';
 import crypto from 'crypto';
+import { serializationPool } from './cache';
 
-// Cache configuration
+// Simplified cache configuration for 3-tier system
 export interface TMDBCacheConfig {
-  nextjsTTL: number; // Next.js fetch cache TTL (3600s)
   memoryTTL: number; // Memory cache TTL (300s)
-  supabaseTTL: number; // Supabase cache TTL (3600s)
+  redisTTL: number; // Redis cache TTL (3600s)
   maxMemoryEntries: number;
 }
 
@@ -191,47 +190,27 @@ function logTMDBCacheEvent(event: string, data: Record<string, any>) {
   console.log(JSON.stringify(logEntry));
 }
 
-// Supabase cache operations
-export async function getTMDBFromSupabase(cacheKey: string): Promise<any | null> {
+// Redis cache operations (replacing Supabase)
+export async function getTMDBFromRedis(cacheKey: string): Promise<any | null> {
   try {
-    const { data, error } = await supabaseServer
-      .from('tmdb_cache')
-      .select('*')
-      .eq('cache_key', cacheKey)
-      .gt('expires_at', new Date().toISOString())
-      .limit(1);
-
-    if (error) throw error;
+    const redis = getRedisClient();
+    const result = await redis.getBuffer(cacheKey);
     
-    if (data && data.length > 0) {
-      const entry = data[0];
-      
-      // Update access statistics
-      await supabaseServer
-        .from('tmdb_cache')
-        .update({
-          access_count: entry.access_count + 1,
-          last_accessed: new Date().toISOString()
-        })
-        .eq('id', entry.id);
-      
-      const responseData = typeof entry.response_data === 'string' 
-        ? JSON.parse(entry.response_data) 
-        : entry.response_data;
+    if (result) {
+      const data = serializationPool.deserialize(result);
       
       logTMDBCacheEvent('tmdb_cache_hit', {
-        cache_layer: 'supabase',
-        cache_key: cacheKey,
-        access_count: entry.access_count + 1
+        cache_layer: 'redis',
+        cache_key: cacheKey
       });
       
-      return responseData;
+      return data;
     }
     
     return null;
   } catch (error) {
     logTMDBCacheEvent('tmdb_cache_error', {
-      cache_layer: 'supabase',
+      cache_layer: 'redis',
       cache_key: cacheKey,
       error: error instanceof Error ? error.message : (typeof error === 'object' ? JSON.stringify(error) : String(error))
     });
@@ -239,39 +218,26 @@ export async function getTMDBFromSupabase(cacheKey: string): Promise<any | null>
   }
 }
 
-export async function setTMDBInSupabase(cacheKey: string, data: any, ttl: number): Promise<void> {
+export async function setTMDBInRedis(cacheKey: string, data: any, ttl: number): Promise<void> {
   try {
-    const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
-    
-    const { error } = await supabaseServer
-      .from('tmdb_cache')
-      .upsert({
-        cache_key: cacheKey,
-        response_data: JSON.stringify(data),
-        expires_at: expiresAt,
-        access_count: 1,
-        last_accessed: new Date().toISOString()
-      }, {
-        onConflict: 'cache_key'
-      });
-
-    if (error) throw error;
+    const redis = getRedisClient();
+    const serialized = serializationPool.serialize(data);
+    await redis.set(cacheKey, serialized, 'EX', ttl);
     
     logTMDBCacheEvent('tmdb_cache_set', {
-      cache_layer: 'supabase',
-      cache_key: cacheKey,
-      expires_at: expiresAt
+      cache_layer: 'redis',
+      cache_key: cacheKey
     });
   } catch (error) {
     logTMDBCacheEvent('tmdb_cache_error', {
-      cache_layer: 'supabase',
+      cache_layer: 'redis',
       cache_key: cacheKey,
       error: error instanceof Error ? error.message : (typeof error === 'object' ? JSON.stringify(error) : String(error))
     });
   }
 }
 
-// Multi-layer cache fetch
+// Optimized 3-tier TMDB cache fetch (Memory → Redis → Database)
 export async function fetchTMDBWithCache(
   url: string,
   theme?: string,
@@ -313,16 +279,16 @@ export async function fetchTMDBWithCache(
     }
   }
   
-  // Layer 2: Check Supabase cache (unless force refresh)
+  // Layer 2: Check Redis cache (unless force refresh)
   if (!forceRefresh) {
-    const supabaseData = await getTMDBFromSupabase(cacheKey);
-    if (supabaseData) {
+    const redisData = await getTMDBFromRedis(cacheKey);
+    if (redisData) {
       // Store in memory cache for faster future access
-      memoryCache.set(cacheKey, supabaseData, 300); // 5 minutes
+      memoryCache.set(cacheKey, redisData, 300); // 5 minutes
       
       const responseTime = Date.now() - startTime;
       logTMDBCacheEvent('tmdb_cache_hit', {
-        cache_layer: 'supabase',
+        cache_layer: 'redis',
         cache_key: cacheKey,
         url,
         response_time_ms: responseTime,
@@ -330,58 +296,14 @@ export async function fetchTMDBWithCache(
       });
       
       return {
-        data: supabaseData,
-        cacheLayer: 'supabase',
+        data: redisData,
+        cacheLayer: 'redis',
         rateLimitStatus
       };
     }
   }
   
-  // Layer 3: Use Next.js unstable_cache (persistent across deployments)
-  try {
-    const cached = await unstable_cache(
-      async () => {
-        // This is where the actual TMDB API call would happen
-        // We'll return null here and let the caller handle the API call
-        return null;
-      },
-      [cacheKey],
-      {
-        revalidate: 3600, // 1 hour
-        tags: ['tmdb']
-      }
-    )();
-    
-    if (cached && !forceRefresh) {
-      // Store in lower layers
-      memoryCache.set(cacheKey, cached, 300);
-      await setTMDBInSupabase(cacheKey, cached, 3600);
-      
-      const responseTime = Date.now() - startTime;
-      logTMDBCacheEvent('tmdb_cache_hit', {
-        cache_layer: 'nextjs',
-        cache_key: cacheKey,
-        url,
-        response_time_ms: responseTime,
-        rate_limit_remaining: rateLimitStatus.tokens
-      });
-      
-      return {
-        data: cached,
-        cacheLayer: 'nextjs',
-        rateLimitStatus
-      };
-    }
-  } catch (error) {
-    logTMDBCacheEvent('tmdb_cache_error', {
-      cache_layer: 'nextjs',
-      cache_key: cacheKey,
-      url,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-  
-  // Layer 4: Cache miss - return null to indicate fresh fetch needed
+  // Layer 3: Cache miss - return null to indicate fresh fetch needed
   const responseTime = Date.now() - startTime;
   logTMDBCacheEvent('tmdb_cache_miss', {
     cache_key: cacheKey,
@@ -397,7 +319,7 @@ export async function fetchTMDBWithCache(
   };
 }
 
-// Store fresh TMDB response in all cache layers
+// Store fresh TMDB response in cache layers
 export async function storeTMDBResponse(
   url: string,
   data: any,
@@ -408,13 +330,13 @@ export async function storeTMDBResponse(
   // Store in memory cache (5 minutes)
   memoryCache.set(cacheKey, data, 300);
   
-  // Store in Supabase cache (1 hour)
-  await setTMDBInSupabase(cacheKey, data, 3600);
+  // Store in Redis cache (1 hour)
+  await setTMDBInRedis(cacheKey, data, 3600);
   
   logTMDBCacheEvent('tmdb_cache_set', {
     cache_key: cacheKey,
     url,
-    cache_layers: ['memory', 'supabase']
+    cache_layers: ['memory', 'redis']
   });
 }
 
@@ -427,25 +349,12 @@ export function getTMDBCacheStats() {
   };
 }
 
-// Clean up expired entries
+// Clean up expired entries (Redis handles TTL natively)
 export async function cleanupTMDBCache(): Promise<void> {
-  try {
-    const { error } = await supabaseServer
-      .from('tmdb_cache')
-      .delete()
-      .lt('expires_at', new Date().toISOString());
-
-    if (error) throw error;
-    
-    logTMDBCacheEvent('tmdb_cache_cleanup', {
-      expired_entries_removed: 'success'
-    });
-  } catch (error) {
-    logTMDBCacheEvent('tmdb_cache_error', {
-      operation: 'cleanup',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
+  // Redis handles TTL expiration automatically
+  logTMDBCacheEvent('tmdb_cache_cleanup', {
+    expired_entries_removed: 'handled_by_redis_ttl'
+  });
 }
 
 // Export instances for direct access

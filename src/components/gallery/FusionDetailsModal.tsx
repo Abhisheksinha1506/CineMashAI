@@ -247,20 +247,34 @@ export function FusionDetailsModal({
                       {(fusion.suggested_cast || fusion.suggestedCast || []).map((c: any, i: number) => (
                         <div key={i} className="flex flex-col items-center text-center group">
                           <div className="relative mb-4">
-                            {c.headshotUrl ? (
-                              <img src={c.headshotUrl} alt={c.name} className="w-16 h-16 rounded-full object-cover border-[3px] border-[#00f0ff]/40 group-hover:border-[#00f0ff] transition-all duration-300 shadow-[0_0_20px_rgba(0,240,255,0.1)]" />
+                            {c.headshotUrl && c.headshotUrl.startsWith('http') ? (
+                              <>
+                                <img 
+                                  src={c.headshotUrl} 
+                                  alt={c.name} 
+                                  className="w-16 h-16 rounded-full object-cover border-[3px] border-[#00f0ff]/40 group-hover:border-[#00f0ff] transition-all duration-300 shadow-[0_0_20px_rgba(0,240,255,0.1)]"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    // Fallback to placeholder on image load error
+                                    const target = e.target as HTMLImageElement;
+                                    target.src = `https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop`;
+                                  }}
+                                />
+                                <div className="absolute inset-0 rounded-full bg-[#00f0ff]/30 blur-lg scale-125 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                <div className="absolute inset-0 rounded-full border-2 border-[#00f0ff]/60 scale-110 opacity-0 group-hover:opacity-100 transition-all duration-300" />
+                              </>
                             ) : (
                               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-[3px] border-[#00f0ff]/40 flex items-center justify-center group-hover:border-[#00f0ff] transition-all duration-300">
-                                <span className="text-[20px] font-black text-zinc-600">{c.name?.[0]}</span>
+                                <span className="text-[20px] font-black text-zinc-600">{c.name?.[0] || '?'}</span>
+                                <div className="absolute inset-0 rounded-full bg-[#00f0ff]/30 blur-lg scale-125 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                <div className="absolute inset-0 rounded-full border-2 border-[#00f0ff]/60 scale-110 opacity-0 group-hover:opacity-100 transition-all duration-300" />
                               </div>
                             )}
-                            <div className="absolute inset-0 rounded-full bg-[#00f0ff]/30 blur-lg scale-125 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                            <div className="absolute inset-0 rounded-full border-2 border-[#00f0ff]/60 scale-110 opacity-0 group-hover:opacity-100 transition-all duration-300" />
                           </div>
                           <div>
-                            <h3 className="text-[15px] font-black text-white uppercase tracking-tight leading-none mb-2">{c.name}</h3>
-                            <p className="text-[12px] text-[#00f0ff] font-bold uppercase tracking-widest mb-3">{c.role}</p>
-                            <p className="text-[12px] text-zinc-400 italic max-w-[200px] leading-relaxed mx-auto">{c.why_fit || c.reason}</p>
+                            <h3 className="text-[15px] font-black text-white uppercase tracking-tight leading-none mb-2">{c.name || 'Unknown Actor'}</h3>
+                            <p className="text-[12px] text-[#00f0ff] font-bold uppercase tracking-widest mb-3">{c.role || 'TBD'}</p>
+                            <p className="text-[12px] text-zinc-400 italic max-w-[200px] leading-relaxed mx-auto">{c.why_fit || c.reason || 'Perfect fit for this role'}</p>
                           </div>
                         </div>
                       ))}

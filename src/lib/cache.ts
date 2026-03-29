@@ -8,12 +8,99 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 
 /**
+ * Performance-optimized serialization system to reduce JSON overhead
+ */
+class SerializationPool {
+  private encoder = new TextEncoder();
+  private decoder = new TextDecoder();
+  private bufferPool: Buffer[] = [];
+  private maxPoolSize = 10;
+
+  getBuffer(size: number): Buffer {
+    const buffer = this.bufferPool.pop() || Buffer.allocUnsafe(size);
+    return buffer.length < size ? Buffer.allocUnsafe(size) : buffer;
+  }
+
+  returnBuffer(buffer: Buffer) {
+    if (this.bufferPool.length < this.maxPoolSize) {
+      this.bufferPool.push(buffer);
+    }
+  }
+
+  // Optimized serialization for common data types
+  serialize(data: any): string | Buffer {
+    // Fast path for primitives
+    if (data === null || data === undefined) return 'null';
+    if (typeof data === 'string') return data;
+    if (typeof data === 'number') return data.toString();
+    if (typeof data === 'boolean') return data ? 'true' : 'false';
+    
+    // For objects, use optimized JSON
+    try {
+      const json = JSON.stringify(data);
+      return json.length < 2048 ? json : this.compressString(json);
+    } catch (error) {
+      console.warn('[Serialization] Failed to serialize data:', error);
+      return '{}';
+    }
+  }
+
+  deserialize(data: string | Buffer): any {
+    if (data instanceof Buffer) {
+      try {
+        const decompressed = this.decompressBuffer(data);
+        return JSON.parse(decompressed);
+      } catch {
+        // Fallback to string parsing
+        return JSON.parse(this.decoder.decode(data));
+      }
+    }
+    
+    // Fast path for common primitives
+    if (data === 'null') return null;
+    if (data === 'true') return true;
+    if (data === 'false') return false;
+    if (!isNaN(Number(data)) && data.toString().trim() !== '') return Number(data);
+    
+    try {
+      return JSON.parse(data.toString());
+    } catch (error) {
+      console.warn('[Serialization] Failed to deserialize data:', error);
+      return null;
+    }
+  }
+
+  private compressString(str: string): Buffer {
+    const buffer = this.getBuffer(str.length);
+    try {
+      const compressed = zlib.gzipSync(str, { level: 6 });
+      this.returnBuffer(buffer);
+      return compressed;
+    } catch (error) {
+      this.returnBuffer(buffer);
+      return Buffer.from(str);
+    }
+  }
+
+  private decompressBuffer(buffer: Buffer): string {
+    try {
+      const decompressed = zlib.gunzipSync(buffer);
+      return this.decoder.decode(decompressed);
+    } catch {
+      return this.decoder.decode(buffer);
+    }
+  }
+}
+
+const serializationPool = new SerializationPool();
+
+/**
  * cache.ts
  * 
- * Multi-layer caching system:
- * 1. InMemoryCache (Primary - Node Local)
- * 2. Next.js unstable_cache (Secondary - Shared Fetch Cache)
- * 3. Redis (Tertiary - Distributed, Scalable, Hardened)
+ * Optimized 3-tier caching system:
+ * 1. InMemoryCache (Primary - Node Local, fastest)
+ * 2. Redis (Secondary - Distributed, scalable)
+ * 3. Database (Tertiary - Persistent storage)
  */
 
 export interface CacheConfig {
@@ -65,21 +152,17 @@ class InMemoryCache {
 const memoryCache = new InMemoryCache(200);
 
 /**
- * Helper: Compresses large JSON strings to save Redis memory.
+ * Optimized data compression using pooling for better performance
  */
 async function compressData(data: any): Promise<Buffer | string> {
-  const json = JSON.stringify(data);
-  if (json.length < 2048) return json;
-  return gzip(json);
+  return serializationPool.serialize(data);
 }
 
 /**
- * Helper: Decompresses Redis data.
+ * Optimized data decompression with error handling
  */
 async function decompressData(data: any): Promise<any> {
-  if (typeof data === 'string') return JSON.parse(data);
-  const decompressed = await gunzip(data);
-  return JSON.parse(decompressed.toString());
+  return serializationPool.deserialize(data);
 }
 
 /**
@@ -116,7 +199,13 @@ export function generateCacheKey(
     .sort()
     .reduce((res, k) => { res[k] = params[k]; return res; }, {} as Record<string, any>);
   
-  const hash = crypto.createHash('sha256').update(JSON.stringify(sortedParams)).digest('hex').substring(0, 16);
+  // Optimized cache key generation with minimal JSON usage
+  const hashInput = Object.keys(sortedParams)
+    .sort()
+    .map(k => `${k}:${sortedParams[k]}`)
+    .join('|');
+  
+  const hash = crypto.createHash('sha256').update(hashInput).digest('hex').substring(0, 16);
   const themeSuffix = theme ? `:${theme}` : '';
   
   // Resolve prefix from KEY_PREFIXES if available
@@ -125,7 +214,7 @@ export function generateCacheKey(
 }
 
 /**
- * Unified Cache Fetcher with Redis Integration.
+ * Optimized 3-tier Cache Fetcher (Memory → Redis → Database)
  */
 export async function cachedFetch<T>(
   key: string,
@@ -137,47 +226,41 @@ export async function cachedFetch<T>(
   const themeAwareKey = key.includes(':') ? key : `${key}:${theme}`;
   const redis = getRedisClient();
 
-  // 1. Memory Hit?
+  // 1. Memory Hit? (Fastest)
   const memHit = memoryCache.get<T>(themeAwareKey);
-  if (memHit) return memHit;
+  if (memHit) {
+    return memHit;
+  }
 
-  // 2. Redis Hit?
+  // 2. Redis Hit? (Medium speed)
   try {
     const isFusion = key.startsWith(KEY_PREFIXES.FUSION) || key.startsWith('FUSION');
+    let result: any;
+    
     if (isFusion) {
       const field = theme || 'default';
-      const result = await redis.hget(themeAwareKey, field);
-      if (result) {
-        const data = await decompressData(result);
-        memoryCache.set(themeAwareKey, data, config.ttl);
-        return data;
-      }
+      result = await redis.hget(themeAwareKey, field);
     } else {
-      const result = await redis.getBuffer(themeAwareKey);
-      if (result) {
-        const data = await decompressData(result);
-        memoryCache.set(themeAwareKey, data, config.ttl);
-        return data;
-      }
+      result = await redis.getBuffer(themeAwareKey);
+    }
+    
+    if (result) {
+      const data = await decompressData(result);
+      memoryCache.set(themeAwareKey, data, config.ttl);
+      return data;
     }
   } catch (err) {
     console.warn('[Cache] Redis Get (Non-Fatal):', err instanceof Error ? err.message : err);
   }
 
-  // 3. Next.js Persistence Layer
-  const freshData = await unstable_cache(
-    async () => {
-      const data = await fetcher();
-      return data;
-    },
-    [themeAwareKey],
-    { revalidate: config.ttl, tags: config.tags }
-  )();
+  // 3. Database fetch (Slowest - fallback)
+  const freshData = await fetcher();
 
-  // Populate Redis Asynchronously
+  // Populate both cache layers asynchronously
   try {
-    const optimized = config.compress !== false ? await compressData(freshData) : JSON.stringify(freshData);
+    const optimized = await compressData(freshData);
     const isFusion = key.startsWith(KEY_PREFIXES.FUSION) || key.startsWith('FUSION');
+    
     if (isFusion) {
       const field = theme || 'default';
       await redis.hset(themeAwareKey, field, optimized);
@@ -189,7 +272,7 @@ export async function cachedFetch<T>(
     console.warn('[Cache] Redis Set (Non-Fatal):', err instanceof Error ? err.message : err);
   }
 
-  // Populate Memory
+  // Always populate memory cache
   memoryCache.set(themeAwareKey, freshData, config.ttl);
 
   return freshData;
@@ -223,4 +306,4 @@ export async function invalidateCache(tags: string[]) {
   // Additional Redis tag sweeping can be implemented via SCAN if needed.
 }
 
-export { memoryCache };
+export { memoryCache, serializationPool };

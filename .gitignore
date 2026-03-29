@@ -1,6 +1,8 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ========================================
+# CineMash AI - Comprehensive .gitignore
+# ========================================
 
-# dependencies
+# Dependencies
 /node_modules
 /.pnp
 .pnp.*
@@ -10,34 +12,267 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# Testing
 /coverage
+*.lcov
+.nyc_output
 
-# next.js
+# Next.js
 /.next/
 /out/
+/build/
+dist/
 
-# production
+# Production
 /build
 
-# misc
-.DS_Store
-*.pem
+# Environment variables (CRITICAL - Never commit these)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
 
-# debug
+# Security files (NEVER commit these)
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+credentials/
+config/local-*
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+*.dump
+*.backup
+*.bak
+*.old
+supabase/.temp/
+
+# Redis
+*.rdb
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.iws
+*.iml
+*.ipr
+*.swp
+*.swo
+*~
+
+# Debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+logs/
+*.log
 
-# env files (can opt-in for committing if needed)
-.env*
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
-# vercel
-.vercel
+# Cache directories
+.cache/
+.parcel-cache/
+.eslintcache/
+.stylelintcache/
+.npm/
 
-# typescript
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
 
+# Vercel
+.vercel
+
+# Local development
+.local
+.devcontainer/
+test-data/
+dev-data/
+
+# Testing artifacts
+test-results/
+playwright-report/
+test-results.xml
+cypress/videos/
+cypress/screenshots/
+
+# AI/ML model files
+*.model
+*.pkl
+*.h5
+*.pb
+
+# Large media files (should be in CDN)
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+*.m4v
+*.mkv
+*.psd
+*.ai
+*.eps
+*.svgz
+*.tiff
+
+# Archive files
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+
+# Performance optimization files (temporary)
+add_performance_indexes.sql
+database-optimization-*.sql
+PERFORMANCE_*.md
+BUG_*.md
+
+# Backup and migration files
+backup/
+migrations/local-*
+
+# Monitoring and logging
+monitoring/
+logs/
+*.prof
+*.heapdump
+
+# Documentation builds
+docs/build/
+site/build/
+
+# Sentry
+.sentryclirc
+
+# Analytics and tracking
+analytics/
+tracking/
+
+# Temporary deployment files
+deploy/
+deployment/
+
+# Generated files
 /src/generated/prisma
+
+# Yarn
+.yarn-integrity
+
+# Package manager specific
+.pnpm-debug.log*
+
+# Local configuration overrides
+override.*
+local.*
+config.local.js
+config.local.ts
+config.local.json
+
+# Temporary folders
+tmp/
+temp/
+
+# Netlify
+.netlify
+
+# SvelteKit
+.svelte-kit
+
+# Gatsby
+.cache/
+public
+
+# Storybook
+.out
+.storybook-out
+
+# Nuxt.js
+.nuxt
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Bower dependency directory
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons
+build/Release
+
+# Dependency directories
+jspm_packages/
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Grunt intermediate storage
+.grunt
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+
+# Folder config file
+Desktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows Installer files
+*.cab
+*.msi
+*.msm
+*.msp
+
+# Windows shortcuts
+*.lnk
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon
+
+# Linux
+*~

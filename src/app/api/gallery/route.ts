@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { unstable_cache } from 'next/cache';
 import { supabaseServer } from '@/lib/supabase-server';
+import { withCompression, compressJSON } from '@/lib/compression';
 
 // Cache gallery fusions with Next.js unstable_cache
 const getCachedGallery = unstable_cache(
@@ -86,7 +87,28 @@ export async function GET(request: NextRequest) {
     // Get cached gallery data
     const result = await getCachedGallery(sort, limit);
     
-    const response = NextResponse.json(result);
+    // Use compression for large responses
+    if (JSON.stringify(result).length > 1024) {
+      const response = await compressJSON({
+        ...result,
+        response_time: Date.now() - startTime,
+        cache_status: result.served_from_cache ? 'hit' : 'miss'
+      });
+      
+      response.headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
+      response.headers.set('X-Cache-Status', result.served_from_cache ? 'hit' : 'miss');
+      response.headers.set('Cache-Control', 'public, max-age=300');
+      
+      return response;
+    }
+    
+    // Regular response for small data
+    const response = NextResponse.json({
+      ...result,
+      response_time: Date.now() - startTime,
+      cache_status: result.served_from_cache ? 'hit' : 'miss'
+    });
+    
     response.headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
     response.headers.set('X-Cache-Status', result.served_from_cache ? 'hit' : 'miss');
     response.headers.set('Cache-Control', 'public, max-age=300');

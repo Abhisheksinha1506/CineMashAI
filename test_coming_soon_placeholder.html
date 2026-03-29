@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Coming Soon Placeholder</title>
+</head>
+<body>
+    <h1>🧪 Testing "Coming Soon" Placeholder</h1>
+    
+    <div id="results"></div>
+    
+    <script>
+        async function testComingSoonPlaceholder() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>🔄 Testing...</p>';
+            
+            try {
+                // Step 1: Create a fusion
+                console.log('📋 Creating fusion...');
+                const createResponse = await fetch('http://localhost:3000/api/fuse-simple', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ movieIds: [550, 13] })
+                });
+                
+                const fusionResult = await createResponse.json();
+                
+                if (fusionResult.success) {
+                    const shareToken = fusionResult.data.share_token;
+                    const fusionTitle = fusionResult.data.title;
+                    console.log('✅ Fusion created:', fusionTitle);
+                    
+                    // Step 2: Get remix data
+                    console.log('🔄 Getting remix data...');
+                    const remixResponse = await fetch(`http://localhost:3000/api/fusion/${shareToken}`);
+                    const remixResult = await remixResponse.json();
+                    
+                    if (remixResult.success) {
+                        const remixData = remixResult.data;
+                        console.log('✅ Remix data loaded');
+                        
+                        results.innerHTML = `
+                            <h2>✅ SUCCESS!</h2>
+                            <p><strong>Fusion Title:</strong> ${fusionTitle}</p>
+                            <p><strong>Share Token:</strong> ${shareToken}</p>
+                            <p><strong>Source Movies:</strong> ${remixData.sourceMovies?.length || 0}</p>
+                            <p><strong>Movies:</strong> ${remixData.sourceMovies?.map(m => m.title).join(' + ') || 'None'}</p>
+                            <p><a href="http://localhost:3000/studio?remix=${shareToken}" target="_blank">🔗 Test Coming Soon Placeholder</a></p>
+                            <p><strong>Expected Behavior:</strong></p>
+                            <ul>
+                                <li>✅ Should show 1 fusion slot + 3 empty slots</li>
+                                <li>✅ Fusion slot should have purple gradient background</li>
+                                <li>✅ Fusion slot should show "Coming Soon" text</li>
+                                <li>✅ Fusion slot should show "${fusionTitle}" below "Coming Soon"</li>
+                                <li>✅ Fusion slot should have sparkle icon and "FUSION" badge</li>
+                                <li>✅ No actual movie poster should be displayed</li>
+                            </ul>
+                        `;
+                    } else {
+                        console.error('❌ Remix API failed:', remixResult.error);
+                        results.innerHTML = `<p>❌ Remix API failed: ${remixResult.error}</p>`;
+                    }
+                } else {
+                    console.error('❌ Fusion creation failed:', fusionResult.error);
+                    results.innerHTML = `<p>❌ Fusion creation failed: ${fusionResult.error}</p>`;
+                }
+            } catch (error) {
+                console.error('❌ Test failed:', error);
+                results.innerHTML = `<p>❌ Test failed: ${error.message}</p>`;
+            }
+        }
+        
+        // Run test when page loads
+        testComingSoonPlaceholder();
+    </script>
+</body>
+</html>

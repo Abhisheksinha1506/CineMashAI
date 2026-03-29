@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Remix Fix Test</title>
+</head>
+<body>
+    <h1>🧪 Testing Remix Fix</h1>
+    
+    <div id="results"></div>
+    
+    <script>
+        async function testRemixFix() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>🔄 Testing...</p>';
+            
+            try {
+                // Step 1: Get a fusion from gallery
+                console.log('📋 Getting fusion from gallery...');
+                const galleryResponse = await fetch('http://localhost:3000/api/gallery?limit=1');
+                const galleryResult = await galleryResponse.json();
+                
+                if (galleryResult.success && galleryResult.data.length > 0) {
+                    const fusion = galleryResult.data[0];
+                    console.log('✅ Found fusion:', fusion.title);
+                    console.log('🔑 Share Token:', fusion.share_token);
+                    
+                    // Step 2: Test the remix API
+                    console.log('🔄 Testing remix API...');
+                    const remixResponse = await fetch(`http://localhost:3000/api/fusion/${fusion.share_token}`);
+                    const remixResult = await remixResponse.json();
+                    
+                    if (remixResult.success) {
+                        console.log('✅ Remix API works!');
+                        console.log('🎬 Source Movies:', remixResult.data.sourceMovies?.length || 0);
+                        
+                        results.innerHTML = `
+                            <h2>✅ SUCCESS!</h2>
+                            <p><strong>Fusion:</strong> ${fusion.title}</p>
+                            <p><strong>Share Token:</strong> ${fusion.share_token}</p>
+                            <p><strong>Source Movies:</strong> ${remixResult.data.sourceMovies?.length || 0}</p>
+                            <p><strong>Movies:</strong> ${remixResult.data.sourceMovies?.map(m => m.title).join(' + ') || 'None'}</p>
+                            <p><a href="http://localhost:3000/studio?remix=${fusion.share_token}" target="_blank">🔗 Test Studio Remix</a></p>
+                        `;
+                    } else {
+                        console.error('❌ Remix API failed:', remixResult.error);
+                        results.innerHTML = `<p>❌ Remix API failed: ${remixResult.error}</p>`;
+                    }
+                } else {
+                    console.error('❌ No fusions found in gallery');
+                    results.innerHTML = '<p>❌ No fusions found in gallery</p>';
+                }
+            } catch (error) {
+                console.error('❌ Test failed:', error);
+                results.innerHTML = `<p>❌ Test failed: ${error.message}</p>`;
+            }
+        }
+        
+        // Run test when page loads
+        testRemixFix();
+    </script>
+</body>
+</html>

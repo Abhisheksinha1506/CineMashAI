@@ -46,9 +46,9 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
   const { fusions: realtimeFusions, loading: realtimeLoading } = useRealtimeGallery();
 
   const handleVoteUpdate = (fusionId: string, newUpvotes: number) => {
-    setFusions(prev => 
-      prev.map(fusion => 
-        fusion.id === fusionId 
+    setFusions(prev =>
+      prev.map(fusion =>
+        fusion.id === fusionId
           ? { ...fusion, upvotes: newUpvotes }
           : fusion
       )
@@ -129,7 +129,7 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
             ...(fusionData as any)
           };
         });
-        
+
         // Update existing ones
         const merged = prev.map(p => {
           const updatedMatch = formattedRealtimeFusions.find(r => r.id === p.id);
@@ -153,7 +153,7 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
   // Handle search
   useEffect(() => {
     if (searchQuery.trim()) {
-      const filtered = fusions.filter(fusion => 
+      const filtered = fusions.filter(fusion =>
         fusion.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         fusion.tagline?.toLowerCase().includes(searchQuery.toLowerCase())
       );
@@ -312,9 +312,9 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -30 }}
-                    transition={{ 
-                      duration: 0.6, 
-                      delay: (selectedFilter === 'popular' && index === 0) ? 0 : index * 0.1 
+                    transition={{
+                      duration: 0.6,
+                      delay: (selectedFilter === 'popular' && index === 0) ? 0 : index * 0.1
                     }}
                   >
                     <GalleryFusionCard
@@ -339,7 +339,7 @@ export default function ClientGalleryPage({ initialData }: ClientGalleryPageProp
       </section>
 
       {/* Fusion Details Modal */}
-      <FusionDetailsModal 
+      <FusionDetailsModal
         isOpen={isDetailsOpen}
         onClose={() => setIsDetailsOpen(false)}
         fusion={selectedFusion}

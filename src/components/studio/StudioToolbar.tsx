@@ -64,7 +64,7 @@ export function StudioToolbar({
     if (draggedChip && draggedChip !== targetMovieId && onMovieReorder) {
       const draggedIndex = selectedMovies.findIndex(m => m.id === draggedChip);
       const targetIndex = selectedMovies.findIndex(m => m.id === targetMovieId);
-      
+
       if (draggedIndex !== -1 && targetIndex !== -1) {
         onMovieReorder(draggedIndex, targetIndex);
       }
@@ -96,7 +96,7 @@ export function StudioToolbar({
           role="searchbox"
           aria-expanded={showSearchResults && searchResults.length > 0}
         />
-        
+
         {/* Search Results Dropdown */}
         <AnimatePresence>
           {showSearchResults && searchQuery && searchResults.length > 0 && (

@@ -118,6 +118,31 @@ export async function POST(request: NextRequest) {
     // Generate real AI response
     const fusionData = await generateFusionDetails(moviesData as any);
 
+    // Validate cast data has proper headshot URLs
+    if (fusionData.suggestedCast) {
+      const validatedCast = fusionData.suggestedCast.map((castMember: any, index: number) => {
+        // Ensure headshotUrl is valid
+        if (!castMember.headshotUrl || !castMember.headshotUrl.startsWith('http')) {
+          console.warn(`[Fuse-Simple] Invalid headshot for ${castMember.name}, using fallback`);
+          castMember.headshotUrl = `https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop`;
+        }
+        
+        // Ensure all required fields
+        return {
+          ...castMember,
+          id: castMember.id || index.toString(),
+          name: castMember.name || 'Unknown Actor',
+          role: castMember.role || 'TBD',
+          reason: castMember.reason || castMember.why_fit || 'Perfect fit for this role',
+          why_fit: castMember.why_fit || castMember.reason || 'Perfect fit for this role'
+        };
+      });
+      
+      fusionData.suggestedCast = validatedCast;
+      fusionData.suggested_cast = validatedCast; // Ensure both formats
+      console.log(`[Fuse-Simple] Validated ${validatedCast.length} cast members with proper headshots`);
+    }
+
     // Generate unique share token
     const shareToken = generateShareToken();
     

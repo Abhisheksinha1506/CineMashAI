@@ -30,7 +30,7 @@ export function Navbar({ children }: { children?: React.ReactNode }) {
 
       <div className="relative max-w-[1440px] mx-auto px-4 sm:px-6">
         <div className="flex h-[64px] items-center justify-between gap-4">
-          
+
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group flex-shrink-0" aria-label="CineMash AI - Home">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--primary)]/20 to-[var(--primary)]/5 border border-[var(--primary)]/20 flex items-center justify-center group-hover:border-[var(--primary)]/40 transition-all">

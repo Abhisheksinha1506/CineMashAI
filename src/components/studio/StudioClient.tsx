@@ -305,9 +305,9 @@ export function StudioClient({ resetKey, initialTrendingMovies = [] }: StudioCli
   const handleFuse = useCallback(async () => {
     if (selectedMovies.length < 2 || selectedMovies.length > 4) return;
     
-    setIsGenerating('Initializing...');
+    setIsGenerating('Creating your fusion...');
     try {
-      const response = await fetch('/api/fuse', {
+      const response = await fetch('/api/fuse-simple', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -321,57 +321,49 @@ export function StudioClient({ resetKey, initialTrendingMovies = [] }: StudioCli
       const result = await response.json();
       
       if (result.success) {
-        if (result.served_from_cache) {
-          // Instant result from cache
-          setFusionResult(result.data);
-          setIsGenerating(false);
-        } else if (result.jobId) {
-          // Asynchronous result from queue
-          setJobId(result.jobId);
-          pollJobStatus(result.jobId);
-        }
+        // Direct result from fuse-simple endpoint
+        setFusionResult(result.data);
+        setIsGenerating(false);
       } else {
-        throw new Error(result.error || 'Failed to initiate fusion');
+        throw new Error(result.error || 'Failed to create fusion');
       }
     } catch (error: any) {
       console.error('Fusion error:', error);
       alert(error.message || 'Something went wrong while fusing.');
       setIsGenerating(false);
     }
-  }, [selectedMovies, pollJobStatus]);
+  }, [selectedMovies]);
 
   const handleRegenerate = useCallback(async () => {
     if (selectedMovies.length < 2 || selectedMovies.length > 4) return;
     
-    setIsGenerating('Queuing regeneration...');
+    setIsGenerating('Regenerating fusion...');
     try {
-      const response = await fetch('/api/fuse', {
+      const response = await fetch('/api/fuse-simple', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          movieIds: selectedMovies.map((m) => Number(m.id)) 
+          movieIds: selectedMovies.map((m) => {
+            const id = Number(m.id);
+            return isNaN(id) ? 0 : id;
+          }) 
         }),
       });
       
       const result = await response.json();
       
       if (result.success) {
-        if (result.served_from_cache) {
-          setFusionResult(result.data);
-          setIsGenerating(false);
-        } else if (result.jobId) {
-          setJobId(result.jobId);
-          pollJobStatus(result.jobId);
-        }
+        setFusionResult(result.data);
+        setIsGenerating(false);
       } else {
-        throw new Error(result.error || 'Failed to initiate regeneration');
+        throw new Error(result.error || 'Failed to regenerate fusion');
       }
     } catch (error: any) {
       console.error('Regeneration error:', error);
       alert(error.message || 'Something went wrong while regenerating.');
       setIsGenerating(false);
     }
-  }, [selectedMovies, pollJobStatus]);
+  }, [selectedMovies]);
 
   const handleSaveToGallery = useCallback(() => {
     // Trigger confetti animation

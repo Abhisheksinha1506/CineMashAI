@@ -38,14 +38,33 @@ const getCachedGalleryData = unstable_cache(
         resultsData = data;
       }
 
-      // Map database results to frontend format
+      // Map database results to frontend format with enhanced cast data handling
       const formattedResults = resultsData.map((fusion: any) => {
         let movieIds = [];
-        let fusionData = {};
+        let fusionData: any = {};
         
         try {
           movieIds = typeof fusion.movie_ids === 'string' ? JSON.parse(fusion.movie_ids) : fusion.movie_ids;
           fusionData = typeof fusion.fusion_data === 'string' ? JSON.parse(fusion.fusion_data) : fusion.fusion_data;
+          
+          // Ensure cast data is properly formatted and has valid headshot URLs
+          if (fusionData.suggestedCast || fusionData.suggested_cast) {
+            const castArray = fusionData.suggestedCast || fusionData.suggested_cast || [];
+            const validatedCast = castArray.map((castMember: any, index: number) => ({
+              ...castMember,
+              id: castMember.id || index.toString(),
+              name: castMember.name || 'Unknown Actor',
+              role: castMember.role || 'TBD',
+              headshotUrl: castMember.headshotUrl && castMember.headshotUrl.startsWith('http') 
+                ? castMember.headshotUrl 
+                : `https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop`,
+              reason: castMember.reason || castMember.why_fit || 'Perfect fit for this role',
+              why_fit: castMember.why_fit || castMember.reason || 'Perfect fit for this role'
+            }));
+            
+            fusionData.suggestedCast = validatedCast;
+            fusionData.suggested_cast = validatedCast;
+          }
         } catch (e) {
           console.error('Error parsing fusion data:', e);
         }

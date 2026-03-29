@@ -30,6 +30,93 @@ import { z } from 'zod';
 import { Movie, ChatMessage } from '@/types';
 import { getMovieCredits } from '@/lib/tmdb-simple';
 
+// ─── Performance & Reliability Configuration ───────────────────────────────
+
+interface AIConfig {
+  timeout: number;
+  maxRetries: number;
+  baseDelay: number;
+  maxDelay: number;
+}
+
+const AI_CONFIG: AIConfig = {
+  timeout: 30000, // 30 seconds
+  maxRetries: 3,
+  baseDelay: 1000, // 1 second
+  maxDelay: 10000, // 10 seconds
+};
+
+/**
+ * Exponential backoff with jitter for retry logic
+ */
+function calculateRetryDelay(attempt: number, baseDelay: number, maxDelay: number): number {
+  const exponentialDelay = baseDelay * Math.pow(2, attempt);
+  const jitter = Math.random() * 0.1 * exponentialDelay; // 10% jitter
+  const delay = Math.min(exponentialDelay + jitter, maxDelay);
+  return delay;
+}
+
+/**
+ * Timeout wrapper for Promise operations
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms`)), timeoutMs);
+    })
+  ]);
+}
+
+/**
+ * Retry wrapper with exponential backoff
+ */
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  config: AIConfig,
+  operationName: string
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
+    try {
+      const startTime = Date.now();
+      const result = await withTimeout(operation(), config.timeout);
+      const duration = Date.now() - startTime;
+      
+      if (attempt > 0) {
+        console.log(`[AI] ${operationName} succeeded on attempt ${attempt + 1} after ${duration}ms`);
+      }
+      
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      console.warn(`[AI] ${operationName} failed on attempt ${attempt + 1}:`, lastError.message);
+      
+      // Don't retry on certain error types
+      if (lastError.message.includes('401') || 
+          lastError.message.includes('403') || 
+          lastError.message.includes('invalid_api_key') ||
+          lastError.message.includes('insufficient_quota')) {
+        throw lastError;
+      }
+      
+      // If this is the last attempt, throw the error
+      if (attempt === config.maxRetries) {
+        throw new Error(`${operationName} failed after ${config.maxRetries + 1} attempts. Last error: ${lastError.message}`);
+      }
+      
+      // Calculate delay for next attempt
+      const delay = calculateRetryDelay(attempt, config.baseDelay, config.maxDelay);
+      console.log(`[AI] Retrying ${operationName} in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError!;
+}
+
 // ─── Type Aliases ─────────────────────────────────────────────────────────────
 
 /**
@@ -153,39 +240,36 @@ export function roughTokenCount(text: string): number {
  * @returns Raw JSON string from the model.
  * @throws If the Groq API returns any non-OK response.
  */
-async function callGroq(messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>): Promise<string> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error('GROQ_API_KEY is not set');
-
-  /** Instantiate a Groq provider with the key from env — never hard-code secrets. */
-  const groqProvider = createGroq({ apiKey });
-
-  const label = `[CineMash] Groq ${GROQ_PRIMARY_MODEL}`;
+async function callGroq(
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+): Promise<string> {
+  const label = '[Groq] LLaMA 3.3-70B';
   console.time(label);
 
+  const groq = createGroq({
+    apiKey: process.env.GROQ_API_KEY,
+  });
+
   try {
-    const { text } = await generateText({
-      model: groqProvider(GROQ_PRIMARY_MODEL),
-      messages,
-      temperature: LLM_PARAMS.temperature,
-      topP: LLM_PARAMS.topP,
-      maxOutputTokens: LLM_PARAMS.maxOutputTokens,
-      // Force strict JSON output — no prose, no markdown fences.
-      // providerOptions passes provider-specific params (Vercel AI SDK v6 API).
-      providerOptions: {
-        groq: { response_format: { type: 'json_object' } },
-      },
-    });
+    const result = await withRetry(
+      () => generateText({
+        model: groq('llama-3.3-70b-versatile'),
+        messages,
+        temperature: LLM_PARAMS.temperature,
+        topP: LLM_PARAMS.topP,
+        maxOutputTokens: LLM_PARAMS.maxOutputTokens,
+      }),
+      AI_CONFIG,
+      'Groq LLaMA 3.3-70B'
+    );
 
     console.timeEnd(label);
-    return text;
+    return result.text;
   } catch (err) {
     console.timeEnd(label);
-    throw err;
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }
-
-// ─── Internal: OpenRouter Fallback Call ───────────────────────────────────────
 
 /**
  * Calls OpenRouter using the OpenAI-compatible REST API.
@@ -199,47 +283,57 @@ async function callGroq(messages: Array<{ role: 'system' | 'user' | 'assistant';
  * @returns Raw JSON string from the first model that succeeds.
  * @throws If all fallback models fail.
  */
-async function callOpenRouter(messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>): Promise<string> {
+async function callOpenRouter(
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not set');
+  if (!apiKey) {
+    throw new Error('OpenRouter API key not configured');
+  }
 
-  let lastError: Error = new Error('All OpenRouter fallback models failed');
+  // Try Claude 3.5 Sonnet first, then Gemini Flash as fallback
+  const models = ['anthropic/claude-3.5-sonnet', 'google/gemini-flash-1.5'];
+  let lastError: Error;
 
-  for (const model of OPENROUTER_FALLBACK_MODELS) {
-    const label = `[CineMash] OpenRouter ${model}`;
+  for (const model of models) {
+    const label = `[OpenRouter] ${model}`;
     console.time(label);
 
     try {
-      const response = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          /** OpenRouter requires these headers for analytics & abuse prevention. */
-          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
-          'X-Title': 'CineMash AI',
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          temperature: LLM_PARAMS.temperature,
-          top_p: LLM_PARAMS.topP,
-          max_tokens: LLM_PARAMS.maxOutputTokens,
-          response_format: { type: 'json_object' },
-        }),
-      });
+      const response = await withRetry(
+        () => fetch(OPENROUTER_API_URL, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            /** OpenRouter requires these headers for analytics & abuse prevention. */
+            'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+            'X-Title': 'CineMash AI',
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature: LLM_PARAMS.temperature,
+            top_p: LLM_PARAMS.topP,
+            max_tokens: LLM_PARAMS.maxOutputTokens,
+            response_format: { type: 'json_object' },
+          }),
+        }).then(res => {
+          if (!res.ok) {
+            return res.json().then(errBody => {
+              throw new Error(
+                `OpenRouter ${model} error (${res.status}): ${errBody.error?.message ?? res.statusText}`
+              );
+            });
+          }
+          return res.json();
+        }).then(data => (data as any).choices[0].message.content as string),
+        AI_CONFIG,
+        `OpenRouter ${model}`
+      );
 
       console.timeEnd(label);
-
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}));
-        throw new Error(
-          `OpenRouter ${model} error (${response.status}): ${(errBody as any).error?.message ?? response.statusText}`
-        );
-      }
-
-      const data = await response.json();
-      return (data as any).choices[0].message.content as string;
+      return response;
     } catch (err) {
       console.timeEnd(label);
       lastError = err instanceof Error ? err : new Error(String(err));
@@ -247,10 +341,8 @@ async function callOpenRouter(messages: Array<{ role: 'system' | 'user' | 'assis
     }
   }
 
-  throw lastError;
+  throw lastError!;
 }
-
-// ─── Internal: Orchestrated LLM Call (Primary → Fallback) ────────────────────
 
 /**
  * Tries Groq first; on any error (429, timeout, network, etc.) it logs a

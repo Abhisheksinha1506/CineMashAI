@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineMash AI - Guide Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #000;
+            color: #fff;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .success {
+            color: #10b981;
+            border: 1px solid #10b981;
+        }
+        .info {
+            color: #3b82f6;
+            border: 1px solid #3b82f6;
+        }
+        h1 {
+            text-align: center;
+            background: linear-gradient(45deg, #a855f7, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .feature-list li:before {
+            content: "✨ ";
+            color: #ec4899;
+        }
+        a {
+            color: #a855f7;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CineMash AI - Dynamic Guide Implementation</h1>
+        
+        <div class="test-section success">
+            <h2>✅ Implementation Complete</h2>
+            <p>The dynamic guide system has been successfully implemented in both Studio and Gallery pages!</p>
+        </div>
+
+        <div class="test-section info">
+            <h2>🎬 Studio Page Guide Features</h2>
+            <ul class="feature-list">
+                <li><strong>Step 1: Pick Your Movies</strong> - Shows when no movies are selected</li>
+                <li><strong>Dynamic Progress</strong> - Updates based on number of movies selected (0-4)</li>
+                <li><strong>Step 2: Create Your Fusion</strong> - Appears when 2-4 movies are selected</li>
+                <li><strong>Generating State</strong> - Shows while AI is creating the fusion</li>
+                <li><strong>Completion State</strong> - Displays when fusion is ready</li>
+                <li><strong>Auto-hide</strong> - Guide automatically hides after 8 seconds when user has 2+ movies</li>
+            </ul>
+        </div>
+
+        <div class="test-section info">
+            <h2>🖼️ Gallery Page Guide Features</h2>
+            <ul class="feature-list">
+                <li><strong>Welcome Message</strong> - Introduces users to the gallery concept</li>
+                <li><strong>Explore Instructions</strong> - Encourages browsing and interaction</li>
+                <li><strong>Get Involved</strong> - Promotes voting, remixing, and creating</li>
+                <li><strong>Navigation Controls</strong> - Previous/Next buttons for manual progression</li>
+                <li><strong>Progress Indicators</strong> - Visual dots showing current step</li>
+            </ul>
+        </div>
+
+        <div class="test-section info">
+            <h2>🎯 Interactive Features</h2>
+            <ul class="feature-list">
+                <li><strong>Guide Button</strong> - Floating help icon to toggle guide visibility</li>
+                <li><strong>Smooth Animations</strong> - Fade in/out with Framer Motion</li>
+                <li><strong>Responsive Design</strong> - Works on mobile and desktop</li>
+                <li><strong>State Management</strong> - Persists guide visibility during session</li>
+                <li><strong>Contextual Actions</strong> - Dynamic action text based on current state</li>
+            </ul>
+        </div>
+
+        <div class="test-section success">
+            <h2>🚀 Test the Implementation</h2>
+            <p>Visit the following pages to test the dynamic guide:</p>
+            <ul>
+                <li><a href="http://localhost:3001/studio" target="_blank">Studio Page</a> - Test movie selection workflow</li>
+                <li><a href="http://localhost:3001/gallery" target="_blank">Gallery Page</a> - Test browsing experience</li>
+            </ul>
+            <p><strong>Expected behavior:</strong> Guide appears automatically, updates based on user actions, and can be toggled via the help button.</p>
+        </div>
+
+        <div class="test-section info">
+            <h2>💡 Technical Implementation Details</h2>
+            <ul class="feature-list">
+                <li>Component: <code>/src/components/ui/DynamicGuide.tsx</code></li>
+                <li>Studio Integration: <code>/src/components/studio/StudioClient.tsx</code></li>
+                <li>Gallery Integration: <code>/src/components/gallery/ClientGalleryPage.tsx</code></li>
+                <li>State Management: React hooks with visibility control</li>
+                <li>Styling: Tailwind CSS with glassmorphism effects</li>
+                <li>Icons: Lucide React icons for visual consistency</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

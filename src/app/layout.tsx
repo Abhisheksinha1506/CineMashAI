@@ -49,7 +49,7 @@ export default function RootLayout({
               {/* Global Cinematic Background */}
               <div className="scanlines-background z-0" />
               <div className="film-grain-texture z-0" />
-              
+
               <main className="relative z-10 flex-1 flex flex-col">
                 {children}
               </main>

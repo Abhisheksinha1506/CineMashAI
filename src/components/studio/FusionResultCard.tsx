@@ -1,13 +1,13 @@
 'use client';
 
+import React, { useState, useMemo, useCallback, memo } from 'react';
 import {
-  Clapperboard, Users, Palette
+  Clapperboard, Users, Palette, ArrowLeft, Database
 } from 'lucide-react';
 import { Scene, CastMember } from '@/types';
 import { getMoviePosterUrl } from '@/lib/tmdb-simple';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 
 interface FusionResultCardProps {
@@ -25,6 +25,7 @@ interface FusionResultCardProps {
   share_token: string;
   sourceMovies?: any[];
   onRegenerate?: () => void;
+  onBackToStudio?: () => void;
 }
 
 const TABS = [
@@ -34,7 +35,106 @@ const TABS = [
 
 type TabId = typeof TABS[number]['id'];
 
-export function FusionResultCard({
+// Memoized poster component to prevent unnecessary re-renders
+const PosterCollage = memo(({ sourceMovies }: { sourceMovies: any[] }) => {
+  const posterCollage = useMemo(() => {
+    if (sourceMovies.length === 0) return null;
+    
+    const posters = sourceMovies.slice(0, 4).map(movie => ({
+      url: movie.poster_path ? getMoviePosterUrl(movie.poster_path, 'w500') : null,
+      title: movie.title
+    }));
+    
+    if (posters.length === 1) {
+      return (
+        <div className="relative w-full h-full">
+          {posters[0].url && (
+            <Image
+              src={posters[0].url}
+              alt={posters[0].title}
+              fill
+              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              priority
+            />
+          )}
+        </div>
+      );
+    }
+    
+    // Handle multiple posters with optimized layout
+    return (
+      <div className="grid grid-cols-2 gap-1 w-full h-full">
+        {posters.map((poster, index) => (
+          <div key={index} className="relative">
+            {poster.url && (
+              <Image
+                src={poster.url}
+                alt={poster.title}
+                fill
+                className="object-cover"
+                sizes="(max-width: 1024px) 50vw, 25vw"
+                priority={index < 2}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }, [sourceMovies]);
+  
+  return posterCollage;
+});
+
+PosterCollage.displayName = 'PosterCollage';
+
+// Memoized cast member component
+const CastMemberCard = memo(({ member, index }: { member: CastMember; index: number }) => (
+  <motion.div
+    key={`${member.name}-${index}`}
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay: index * 0.1 }}
+    className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.04]"
+  >
+    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-white/[0.05]">
+      {member.headshotUrl && (
+        <Image
+          src={member.headshotUrl}
+          alt={member.name}
+          fill
+          className="object-cover"
+          sizes="48px"
+        />
+      )}
+    </div>
+    <div className="flex-1">
+      <h4 className="font-semibold text-white">{member.name}</h4>
+      <p className="text-sm text-white/70">{member.role}</p>
+      <p className="text-xs text-white/50 mt-1">{member.reason || member.why_fit}</p>
+    </div>
+  </motion.div>
+));
+
+CastMemberCard.displayName = 'CastMemberCard';
+
+// Memoized scene component
+const SceneCard = memo(({ scene, index }: { scene: Scene; index: number }) => (
+  <motion.div
+    key={`${scene.scene}-${index}`}
+    initial={{ opacity: 0, x: -20 }}
+    animate={{ opacity: 1, x: 0 }}
+    transition={{ delay: index * 0.1 }}
+    className="p-4 rounded-lg bg-white/[0.02] border border-white/[0.04]"
+  >
+    <h4 className="font-semibold text-white mb-2">{scene.scene}</h4>
+    <p className="text-sm text-white/70 leading-relaxed">{scene.description}</p>
+  </motion.div>
+));
+
+SceneCard.displayName = 'SceneCard';
+
+const FusionResultCard = memo(({
   title,
   tagline,
   synopsis,
@@ -48,7 +148,8 @@ export function FusionResultCard({
   sourceMovies = [],
   share_token,
   onRegenerate,
-}: FusionResultCardProps) {
+  onBackToStudio,
+}: FusionResultCardProps) => {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
   const scenes = key_scenes || keyScenes || [];
@@ -273,8 +374,8 @@ export function FusionResultCard({
               ))}
             </div>
 
-            {/* Enhanced tab content with reduced padding and height to save vertical space */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 max-h-[450px]">
+            {/* Enhanced tab content with fixed height and scrolling */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 h-[450px]">
               <AnimatePresence>
                 {activeTab === 'overview' && (
                   <motion.div
@@ -409,9 +510,42 @@ export function FusionResultCard({
 
           </div>
         </div>
+
+        {/* Navigation Buttons Section */}
+        <div className="border-t border-white/[0.05] p-6 bg-black/40">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            {/* Back to Studio Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onBackToStudio}
+              className="group relative px-8 py-3 rounded-full text-[14px] font-black uppercase tracking-widest transition-all duration-500 overflow-hidden bg-white/5 border border-white/10 hover:bg-white/10 text-white flex items-center gap-3"
+            >
+              <ArrowLeft className="h-5 w-5 group-hover:-translate-x-1 transition-transform" />
+              <span>Back to Studio</span>
+              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </motion.button>
+
+            {/* Browse Gallery Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => window.location.href = '/gallery'}
+              className="group relative px-8 py-3 rounded-full text-[14px] font-black uppercase tracking-widest transition-all duration-500 overflow-hidden bg-gradient-to-r from-[var(--primary)]/20 to-cyan-400/20 border border-[var(--primary)]/30 hover:border-[var(--primary)]/50 text-[var(--primary)] flex items-center gap-3"
+            >
+              <Database className="h-5 w-5" />
+              <span>Browse Gallery</span>
+              <div className="absolute inset-0 bg-gradient-to-r from-[var(--primary)]/30 to-cyan-400/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </motion.button>
+          </div>
+        </div>
       </div>
 
       {/* Bottom link removed */}
     </motion.div>
   );
-}
+});
+
+FusionResultCard.displayName = 'FusionResultCard';
+
+export default FusionResultCard;

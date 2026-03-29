@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { hashIP } from '@/lib/utils';
 import { getCachedFusion, shouldCacheFusion } from '@/lib/fusion-cache-simple';
-import { addFusionJob } from '@/lib/queue';
+import { pushFusionTask } from '@/lib/qstash';
 import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 
 // Input validation schema
@@ -52,9 +52,9 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // 4. Enqueue Job (Asynchronous Backend Scaling)
+    // 4. Enqueue Job (Serverless-Native Push)
     try {
-      const job = await addFusionJob({
+      const job = await pushFusionTask({
         movieIds,
         constraints,
         userId
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
       const response = NextResponse.json({
         success: true,
-        jobId: job.id,
+        jobId: job.messageId,
         status: 'queued',
         message: 'Fusion request accepted into the distributed queue.'
       }, { 
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       });
       
       response.headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
-      response.headers.set('X-Job-ID', job.id || '');
+      response.headers.set('X-Job-ID', job.messageId || '');
       return response;
       
     } catch (enqueueError: any) {
