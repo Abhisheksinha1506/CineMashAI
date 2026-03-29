@@ -5,7 +5,7 @@ import {
   Clapperboard, Users, Palette, ArrowLeft, Database
 } from 'lucide-react';
 import { Scene, CastMember } from '@/types';
-import { getMoviePosterUrl } from '@/lib/tmdb-simple';
+import { getMoviePosterUrl } from '@/lib/api/tmdb-client';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
