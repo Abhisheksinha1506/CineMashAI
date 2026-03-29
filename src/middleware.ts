@@ -45,10 +45,15 @@ export async function middleware(request: NextRequest) {
     response.headers.set('Cache-Control', 'public, max-age=300, s-maxage=600, stale-while-revalidate=900');
   }
   
-  // Add security headers
+  // Add comprehensive security headers
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'origin-when-cross-origin');
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  response.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
   
   // Add performance hints
   response.headers.set('Vary', 'Accept-Encoding, Accept');

@@ -5,9 +5,6 @@
   "framework": "nextjs",
   "outputDirectory": ".next",
   "regions": ["sfo1"],
-  "env": {
-    "NEXT_PUBLIC_APP_URL": "@app-url"
-  },
   "build": {
     "env": {
       "PRISMA_GENERATE_DATAPROXY": "true"
@@ -15,7 +12,7 @@
   },
   "functions": {
     "src/app/api/**/*.ts": {
-      "maxDuration": 30
+      "maxDuration": 10
     }
   }
 }
