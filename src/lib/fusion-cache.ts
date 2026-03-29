@@ -176,13 +176,13 @@ export async function getFusionCacheStats(): Promise<any> {
     const now = new Date();
     const stats = {
       totalEntries: data?.length || 0,
-      activeEntries: data?.filter(entry => new Date(entry.expires_at) > now).length || 0,
-      expiredEntries: data?.filter(entry => new Date(entry.expires_at) <= now).length || 0,
-      totalAccessCount: data?.reduce((sum, entry) => sum + entry.access_count, 0) || 0,
-      averageAccessCount: data?.length ? (data.reduce((sum, entry) => sum + entry.access_count, 0) / data.length) : 0,
+      activeEntries: data?.filter((entry: any) => new Date(entry.expires_at) > now).length || 0,
+      expiredEntries: data?.filter((entry: any) => new Date(entry.expires_at) <= now).length || 0,
+      totalAccessCount: data?.reduce((sum: number, entry: any) => sum + entry.access_count, 0) || 0,
+      averageAccessCount: data?.length ? (data.reduce((sum: number, entry: any) => sum + entry.access_count, 0) / data.length) : 0,
       oldestEntry: data?.[0]?.created_at || null,
       newestEntry: data?.[data.length - 1]?.created_at || null,
-      entries: data?.slice(0, 10).map(entry => ({
+      entries: data?.slice(0, 10).map((entry: any) => ({
         cacheKey: entry.cache_key,
         accessCount: entry.access_count,
         createdAt: entry.created_at,

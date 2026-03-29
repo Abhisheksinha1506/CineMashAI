@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase-server';
+import { getSupabaseServer } from '@/lib/supabase-server';
 import { hashIP } from '@/lib/utils';
 import crypto from 'crypto';
 
@@ -20,9 +20,10 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = hashIP(request);
+    const supabase = getSupabaseServer();
     
     // Check if user already voted
-    const { data: existingVote, error: voteError } = await supabaseServer
+    const { data: existingVote, error: voteError } = await supabase
       .from('fusion_votes')
       .select('*')
       .eq('fusion_id', body.shareToken)
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current fusion
-    const { data: fusionData, error: fusionError } = await supabaseServer
+    const { data: fusionData, error: fusionError } = await supabase
       .from('fusions')
       .select('*')
       .eq('share_token', body.shareToken)
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Record vote
-    await supabaseServer.from('fusion_votes').insert({
+    await (supabase as any).from('fusion_votes').insert({
       id: crypto.randomUUID(),
       fusion_id: body.shareToken,
       vote_type: body.voteType as 'up' | 'down',
@@ -70,9 +71,9 @@ export async function POST(request: NextRequest) {
 
     // Update fusion upvotes count
     const upvotesChange = body.voteType === 'up' ? 1 : -1;
-    const newUpvotes = (currentFusion.upvotes || 0) + upvotesChange;
+    const newUpvotes = ((currentFusion as any).upvotes || 0) + upvotesChange;
     
-    await supabaseServer
+    await (supabase as any)
       .from('fusions')
       .update({ upvotes: newUpvotes })
       .eq('share_token', body.shareToken);
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         voteType: body.voteType,
-        newUpvotes: (currentFusion.upvotes || 0) + upvotesChange,
+        newUpvotes: ((currentFusion as any).upvotes || 0) + upvotesChange,
       },
       served_from_cache: false,
       cache_age_seconds: 0,

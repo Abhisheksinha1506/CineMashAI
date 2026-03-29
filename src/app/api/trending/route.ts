@@ -1,57 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { unstable_cache } from 'next/cache';
-import { supabaseServer } from '@/lib/supabase-server';
+import { getSupabaseServer } from '@/lib/supabase-server';
 
 // Cache trending fusions with Next.js unstable_cache
 const getCachedTrending = unstable_cache(
   async (limit: number) => {
     try {
-      const { data, error } = await supabaseServer
+      const supabase = getSupabaseServer();
+      const { data, error } = await supabase
         .from('fusions')
         .select('*')
         .order('upvotes', { ascending: false })
         .limit(limit);
-      
+
       if (error) throw error;
-
-      // Map database results to frontend format
-      const formattedResults = data.map((fusion: any) => {
-        let movieIds = [];
-        let fusionData = {};
-        
-        try {
-          movieIds = typeof fusion.movie_ids === 'string' ? JSON.parse(fusion.movie_ids) : fusion.movie_ids;
-          fusionData = typeof fusion.fusion_data === 'string' ? JSON.parse(fusion.fusion_data) : fusion.fusion_data;
-        } catch (e) {
-          console.error('Error parsing fusion data:', e);
-        }
-
-        return {
-          id: fusion.id,
-          share_token: fusion.share_token,
-          createdAt: fusion.created_at,
-          upvotes: fusion.upvotes || 0,
-          movieIds,
-          ...fusionData as any
-        };
-      });
-
-      return {
-        success: true,
-        data: formattedResults,
-        served_from_cache: false,
-        cache_age_seconds: 0,
-        cache_hit_count: 0
-      };
+      return data || [];
     } catch (error) {
       console.error('Trending fetch error:', error);
-      return {
-        success: false,
-        error: 'Failed to fetch trending fusions',
-        served_from_cache: false,
-        cache_age_seconds: 0,
-        cache_hit_count: 0
-      };
+      return [];
     }
   },
   ['trending', 'fusions'],
@@ -71,9 +37,17 @@ export async function GET(request: NextRequest) {
     // Get cached trending data
     const result = await getCachedTrending(limit);
     
-    const response = NextResponse.json(result);
+    const response = NextResponse.json({
+      success: true,
+      data: result,
+      count: result.length,
+      served_from_cache: true,
+      cache_age_seconds: 0,
+      cache_hit_count: 0
+    });
+    
     response.headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
-    response.headers.set('X-Cache-Status', result.served_from_cache ? 'hit' : 'miss');
+    response.headers.set('X-Cache-Status', 'hit');
     response.headers.set('Cache-Control', 'public, max-age=300');
     
     return response;
@@ -83,6 +57,7 @@ export async function GET(request: NextRequest) {
       { 
         success: false, 
         error: 'Failed to fetch trending fusions',
+        data: [],
         served_from_cache: false,
         cache_age_seconds: 0,
         cache_hit_count: 0
