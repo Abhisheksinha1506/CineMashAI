@@ -86,6 +86,7 @@ export function Sidebar({ className }: PopularFusionsProps) {
                         <img
                           src={getMoviePosterUrl(movie.poster_path, 'w92')}
                           alt={movie.title}
+                          crossOrigin="anonymous"
                           className="w-full h-full object-cover"
                         />
                       </div>

@@ -136,6 +136,7 @@ export function FusionDetailsModal({
                     <img 
                       src={url} 
                       alt="" 
+                      crossOrigin="anonymous"
                       className="w-full h-full object-cover"
                     />
                   </div>
@@ -252,6 +253,7 @@ export function FusionDetailsModal({
                                 <img 
                                   src={c.headshotUrl} 
                                   alt={c.name} 
+                                  crossOrigin="anonymous"
                                   className="w-16 h-16 rounded-full object-cover border-[3px] border-[#00f0ff]/40 group-hover:border-[#00f0ff] transition-all duration-300 shadow-[0_0_20px_rgba(0,240,255,0.1)]"
                                   loading="lazy"
                                   onError={(e) => {

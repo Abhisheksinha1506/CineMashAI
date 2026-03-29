@@ -43,6 +43,7 @@ export function TrendingPageSidebar({ trendingFusions, onRemix }: TrendingPageSi
                         <img
                           src={fusion.posterUrl}
                           alt={fusion.title}
+                          crossOrigin="anonymous"
                           className="w-full h-full object-cover"
                         />
                       ) : (

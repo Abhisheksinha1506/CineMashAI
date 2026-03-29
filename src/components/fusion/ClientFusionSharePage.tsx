@@ -173,6 +173,7 @@ export default function ClientFusionSharePage({ initialData, shareToken }: Clien
                       <img
                         src={getMoviePosterUrl(`placeholder-movie-${index + 1}`)}
                         alt={`Movie ${index + 1}`}
+                        crossOrigin="anonymous"
                         className="w-full h-full object-cover"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />

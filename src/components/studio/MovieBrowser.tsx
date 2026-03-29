@@ -80,6 +80,7 @@ export function MovieBrowser({ selectedMovies, onMovieSelect, onMovieRemove }: M
           <img
             src={getMoviePosterUrl(movie.poster_path, 'w342')}
             alt={movie.title}
+            crossOrigin="anonymous"
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
 
@@ -178,6 +179,7 @@ export function MovieBrowser({ selectedMovies, onMovieSelect, onMovieRemove }: M
                 <img
                   src={getMoviePosterUrl(movie.poster_path, 'w185')}
                   alt={movie.title}
+                  crossOrigin="anonymous"
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />

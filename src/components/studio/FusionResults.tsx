@@ -41,6 +41,7 @@ export function FusionResults({ fusionResult, onShare, onDownload }: FusionResul
                   <img
                     src={getMoviePosterUrl(movie.poster_path, 'w342')}
                     alt={movie.title}
+                    crossOrigin="anonymous"
                     className="w-full h-full object-cover opacity-60"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
@@ -85,6 +86,7 @@ export function FusionResults({ fusionResult, onShare, onDownload }: FusionResul
                       <img
                         src={scene.imageUrl}
                         alt={scene.title}
+                        crossOrigin="anonymous"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                     </div>
@@ -116,6 +118,7 @@ export function FusionResults({ fusionResult, onShare, onDownload }: FusionResul
                       <img
                         src={cast.headshotUrl}
                         alt={cast.name}
+                        crossOrigin="anonymous"
                         className="w-full h-full object-cover"
                       />
                     </div>
