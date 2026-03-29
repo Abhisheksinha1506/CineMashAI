@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, memo } from 'react';
+import React, { useState, useMemo, useCallback, memo, useEffect } from 'react';
 import {
   Clapperboard, Users, Palette, ArrowLeft, Database
 } from 'lucide-react';
@@ -9,6 +9,51 @@ import { getMoviePosterUrl } from '@/lib/tmdb-simple';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
+
+// Custom scrollbar styles
+const customScrollbarStyles = `
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 240, 255, 0.3);
+    border-radius: 3px;
+    transition: background 0.3s ease;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 240, 255, 0.5);
+  }
+  .custom-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+`;
+
+// Hook to inject custom scrollbar styles
+const useCustomScrollbar = () => {
+  useEffect(() => {
+    const styleId = 'custom-scrollbar-styles';
+    
+    // Check if styles already exist
+    if (!document.getElementById(styleId)) {
+      const styleElement = document.createElement('style');
+      styleElement.id = styleId;
+      styleElement.textContent = customScrollbarStyles;
+      document.head.appendChild(styleElement);
+    }
+    
+    // Cleanup function
+    return () => {
+      const existingStyle = document.getElementById(styleId);
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+    };
+  }, []);
+};
 
 interface FusionResultCardProps {
   title: string;
@@ -151,6 +196,9 @@ const FusionResultCard = memo(({
   onBackToStudio,
 }: FusionResultCardProps) => {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
+  
+  // Inject custom scrollbar styles
+  useCustomScrollbar();
 
   const scenes = key_scenes || keyScenes || [];
   const cast = suggested_cast || suggestedCast || [];
@@ -451,27 +499,27 @@ const FusionResultCard = memo(({
                       </div>
                     </div>
                     
-                    {/* Enhanced circular headshots with cyan rings */}
-                    <div className="grid grid-cols-2 gap-6">
+                    {/* Enhanced circular headshots with vertical scroll */}
+                    <div className="max-h-[320px] overflow-y-auto custom-scrollbar space-y-4 pr-2">
                       {cast.map((c, idx) => (
                         <motion.div
                           key={idx}
                           initial={{ opacity: 0, y: 12 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.3 }}
-                          className="flex flex-col items-center text-center group"
+                          className="flex items-center gap-4 p-3 rounded-lg bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-all duration-300 group"
                         >
                           {/* Enhanced circular headshot with cyan ring */}
-                          <div className="relative mb-4">
+                          <div className="relative flex-shrink-0">
                             {c.headshotUrl && c.headshotUrl !== '' ? (
                               <>
-                                <div className="relative w-16 h-16 rounded-full overflow-hidden border-[3px] border-[#00f0ff]/40 group-hover:border-[#00f0ff] transition-all duration-300 z-10">
+                                <div className="relative w-14 h-14 rounded-full overflow-hidden border-[2px] border-[#00f0ff]/40 group-hover:border-[#00f0ff] transition-all duration-300 z-10">
                                   <Image
                                     src={c.headshotUrl}
                                     alt={c.name}
                                     fill
                                     className="object-cover"
-                                    sizes="64px"
+                                    sizes="56px"
                                     loading="lazy"
                                   />
                                 </div>
@@ -481,8 +529,8 @@ const FusionResultCard = memo(({
                                 <div className="absolute inset-0 rounded-full border-2 border-[#00f0ff]/60 scale-110 opacity-0 group-hover:opacity-100 transition-all duration-300" />
                               </>
                             ) : (
-                              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-[3px] border-[#00f0ff]/40 flex items-center justify-center group-hover:border-[#00f0ff] transition-all duration-300">
-                                <span className="text-[20px] font-black text-zinc-600">
+                              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-[2px] border-[#00f0ff]/40 flex items-center justify-center group-hover:border-[#00f0ff] transition-all duration-300">
+                                <span className="text-[18px] font-black text-zinc-600">
                                   {c.name?.charAt(0) || '?'}
                                 </span>
                                 {/* Enhanced cyan glow effect */}
@@ -493,11 +541,11 @@ const FusionResultCard = memo(({
                             )}
                           </div>
                           
-                          <div>
-                            <p className="text-[15px] font-black text-white mb-2">{c.name}</p>
-                            <p className="text-[12px] text-[#00f0ff] font-bold uppercase tracking-widest mb-3">{c.role}</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[14px] font-black text-white mb-1 truncate">{c.name}</p>
+                            <p className="text-[11px] text-[#00f0ff] font-bold uppercase tracking-widest mb-2">{c.role}</p>
                             {c.why_fit && (
-                              <p className="text-[12px] text-zinc-400 italic max-w-[200px] mx-auto leading-relaxed">{c.why_fit}</p>
+                              <p className="text-[11px] text-zinc-400 italic leading-relaxed line-clamp-2">{c.why_fit}</p>
                             )}
                           </div>
                         </motion.div>
