@@ -1,4 +1,4 @@
-import { FusionResultCard } from './FusionResultCard';
+import FusionResultCard from './FusionResultCard';
 
 // Mock data for development
 const mockFusionData = {

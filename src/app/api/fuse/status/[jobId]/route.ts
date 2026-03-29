@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fusionQueue } from '@/lib/queue';
 
 /**
  * GET /api/fuse/status/[jobId]
@@ -9,52 +8,22 @@ import { fusionQueue } from '@/lib/queue';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
-  const { jobId } = params;
+  const { jobId } = await params;
 
   if (!jobId) {
     return NextResponse.json({ success: false, error: 'Job ID is required' }, { status: 400 });
   }
 
   try {
-    const job = await fusionQueue.getJob(jobId);
-
-    if (!job) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Job not found. It may have expired or never existed.' 
-      }, { status: 404 });
-    }
-
-    const state = await job.getState();
-    const progress = job.progress;
-    const reason = job.failedReason;
-
-    // Handle different states
-    if (state === 'completed') {
-      return NextResponse.json({
-        success: true,
-        status: 'completed',
-        data: job.returnvalue, // This is what the worker returned
-      });
-    }
-
-    if (state === 'failed') {
-      return NextResponse.json({
-        success: false,
-        status: 'failed',
-        error: reason || 'AI generation failed during background processing.'
-      });
-    }
-
-    // Still in progress or queued
+    // TODO: Replace with actual job status implementation
+    // The queue system was removed, so this is a placeholder
     return NextResponse.json({
-      success: true,
-      status: state, // 'active', 'waiting', 'delayed', etc.
-      progress: progress,
-      message: state === 'active' ? 'AI is currently fusing your movies...' : 'Your request is in the queue.'
-    });
+      success: false,
+      error: 'Job status checking is currently disabled. The background queue system has been removed.',
+      status: 'disabled'
+    }, { status: 503 });
 
   } catch (error) {
     console.error(`[Job Status API] Error fetching job ${jobId}:`, error);

@@ -13,11 +13,11 @@ async function test() {
   try {
     const fusion = await generateFusion(mockMovies);
     console.log('✅ Fusion Generated Successfully!');
-    console.log('Title:', fusion.title);
-    console.log('Tagline:', fusion.tagline);
-    console.log('Scenes count:', fusion.key_scenes.length);
-    console.log('Cast count:', fusion.suggestedCast.length);
-    console.log('Box Office Vibe:', fusion.box_office_vibe);
+    console.log('Title:', fusion.fusionData.title);
+    console.log('Tagline:', fusion.fusionData.tagline);
+    console.log('Scenes count:', fusion.fusionData.key_scenes.length);
+    console.log('Cast count:', fusion.fusionData.suggestedCast.length);
+    console.log('Box Office Vibe:', fusion.fusionData.box_office_vibe);
   } catch (error) {
     console.error('❌ Verification failed:', error);
   }

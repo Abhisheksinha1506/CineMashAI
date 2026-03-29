@@ -10,68 +10,97 @@ interface RateLimitResult {
   retryAfter?: number;
 }
 
-const RATE_LIMIT_PER_MINUTE = parseInt(process.env.RATE_LIMIT_PER_MINUTE || '20');
+const RATE_LIMIT_PER_MINUTE = parseInt(process.env.RATE_LIMIT_PER_MINUTE || '60');
+const USER_RATE_LIMIT_PER_MINUTE = parseInt(process.env.USER_RATE_LIMIT_PER_MINUTE || '30');
+const GLOBAL_RATE_LIMIT_PER_MINUTE = parseInt(process.env.GLOBAL_RATE_LIMIT_PER_MINUTE || '1000');
 const WINDOW_SIZE = 60; // 1 minute in seconds for Redis EXPIRE
 
 /**
  * Checks the rate limit for a given request using Redis.
  * Uses an atomic INCR and EXPIRE strategy for distributed consistency.
  */
-export async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
+export async function checkRateLimit(request: NextRequest, userId?: string): Promise<RateLimitResult> {
   const ipHash = hashIP(request);
   const redis = getRedisClient();
-  const key = `${KEY_PREFIXES.RATE}${ipHash}`;
+  
+  // Check multiple rate limits: IP-based, user-based, and global
+  const ipKey = `${KEY_PREFIXES.RATE}ip:${ipHash}`;
+  const userKey = userId ? `${KEY_PREFIXES.RATE}user:${userId}` : null;
+  const globalKey = `${KEY_PREFIXES.RATE}global`;
   
   try {
-    // Multi-command atomic check
-    const multi = redis.multi();
-    multi.incr(key);
-    multi.ttl(key);
+    // Check IP-based rate limit
+    const ipCount = await checkSingleLimit(redis, ipKey, RATE_LIMIT_PER_MINUTE);
     
-    const results = await multi.exec();
-    if (!results || !results[0] || !results[1]) {
-        throw new Error('Redis multi-exec failed');
+    // Check user-based rate limit if userId provided
+    let userCount = 0;
+    if (userKey) {
+      userCount = await checkSingleLimit(redis, userKey, USER_RATE_LIMIT_PER_MINUTE);
     }
-
-    const [incrErr, count] = results[0] as [Error | null, number];
-    const [ttlErr, ttl] = results[1] as [Error | null, number];
-
-    if (incrErr || ttlErr) throw incrErr || ttlErr;
-
-    // Set expiration on first request in the window
-    if (count === 1 || ttl === -1) {
-      await redis.expire(key, WINDOW_SIZE);
-    }
-
-    const remaining = Math.max(0, RATE_LIMIT_PER_MINUTE - count);
-    const resetTime = Date.now() + (ttl > 0 ? ttl : WINDOW_SIZE) * 1000;
-
-    if (count > RATE_LIMIT_PER_MINUTE) {
+    
+    // Check global rate limit
+    const globalCount = await checkSingleLimit(redis, globalKey, GLOBAL_RATE_LIMIT_PER_MINUTE);
+    
+    // Determine the most restrictive limit
+    const effectiveLimit = userId ? USER_RATE_LIMIT_PER_MINUTE : RATE_LIMIT_PER_MINUTE;
+    const effectiveCount = userId ? userCount : ipCount;
+    
+    // Check if any limit is exceeded
+    const ipExceeded = ipCount > RATE_LIMIT_PER_MINUTE;
+    const userExceeded = userId ? userCount > USER_RATE_LIMIT_PER_MINUTE : false;
+    const globalExceeded = globalCount > GLOBAL_RATE_LIMIT_PER_MINUTE;
+    
+    if (ipExceeded || userExceeded || globalExceeded) {
+      const ttl = await redis.ttl(ipKey);
+      const resetTime = Date.now() + (ttl > 0 ? ttl : WINDOW_SIZE) * 1000;
+      
       return {
         allowed: false,
-        limit: RATE_LIMIT_PER_MINUTE,
+        limit: effectiveLimit,
         remaining: 0,
         resetTime,
         retryAfter: ttl > 0 ? ttl : WINDOW_SIZE
       };
     }
 
+    const remaining = Math.max(0, effectiveLimit - effectiveCount);
+    const ttl = await redis.ttl(ipKey);
+    const resetTime = Date.now() + (ttl > 0 ? ttl : WINDOW_SIZE) * 1000;
+
     return {
       allowed: true,
-      limit: RATE_LIMIT_PER_MINUTE,
+      limit: effectiveLimit,
       remaining,
       resetTime
     };
   } catch (error) {
     console.error('[RateLimit] Redis error, falling back to permissive mode:', error);
     // Permissive fallback so users aren't blocked if Redis is down
+    const effectiveLimit = userId ? USER_RATE_LIMIT_PER_MINUTE : RATE_LIMIT_PER_MINUTE;
     return {
       allowed: true,
-      limit: RATE_LIMIT_PER_MINUTE,
+      limit: effectiveLimit,
       remaining: 1,
       resetTime: Date.now() + WINDOW_SIZE * 1000
     };
   }
+}
+
+/**
+ * Checks a single rate limit key
+ */
+async function checkSingleLimit(redis: any, key: string, limit: number): Promise<number> {
+  const multi = redis.multi();
+  multi.incr(key);
+  multi.expire(key, WINDOW_SIZE);
+  
+  const results = await multi.exec();
+  if (!results || !results[0]) {
+    throw new Error('Redis multi-exec failed');
+  }
+  
+  const [, count] = results[0] as [Error | null, number];
+  return count;
 }
 
 export function getRateLimitHeaders(result: RateLimitResult): Record<string, string> {
@@ -126,16 +155,19 @@ export function getClientIP(request: NextRequest): string {
 /**
  * Higher-order function to wrap API handlers with rate limiting.
  */
-export function withRateLimit(handler: (req: NextRequest) => Promise<Response>) {
+export function withRateLimit(handler: (req: NextRequest, userId?: string) => Promise<Response>) {
   return async (request: NextRequest) => {
     try {
-      const rateLimitResult = await checkRateLimit(request);
+      // Extract userId from request if available (e.g., from JWT token or session)
+      const userId = await extractUserIdFromRequest(request);
+      
+      const rateLimitResult = await checkRateLimit(request, userId);
       
       if (!rateLimitResult.allowed) {
         return createRateLimitResponse(rateLimitResult);
       }
       
-      const response = await handler(request);
+      const response = await handler(request, userId);
       if (response instanceof Response) {
         const headers = getRateLimitHeaders(rateLimitResult);
         Object.entries(headers).forEach(([key, value]) => {
@@ -149,4 +181,13 @@ export function withRateLimit(handler: (req: NextRequest) => Promise<Response>) 
       return handler(request); // Still try to serve if limiter breaks
     }
   };
+}
+
+/**
+ * Extract user ID from request (placeholder implementation)
+ */
+async function extractUserIdFromRequest(request: NextRequest): Promise<string | undefined> {
+  // TODO: Implement user ID extraction from JWT token, session, or other auth mechanism
+  // For now, return undefined to use IP-based rate limiting
+  return undefined;
 }

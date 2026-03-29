@@ -12,6 +12,9 @@ import Redis, { Cluster, RedisOptions, ClusterOptions } from 'ioredis';
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const REDIS_CLUSTER_ENABLED = process.env.REDIS_CLUSTER_ENABLED === 'true';
 const REDIS_MAX_MEMORY = process.env.REDIS_MAX_MEMORY || '512mb';
+const REDIS_POOL_SIZE = parseInt(process.env.REDIS_POOL_SIZE || '20');
+const REDIS_MAX_RETRIES = parseInt(process.env.REDIS_MAX_RETRIES || '3');
+const REDIS_CONNECT_TIMEOUT = parseInt(process.env.REDIS_CONNECT_TIMEOUT || '10000');
 
 /**
  * Checks if the application is running in Redis Cluster mode.
@@ -101,12 +104,16 @@ export function getRedisClient(): Redis | Cluster {
   const commonOptions: RedisOptions = {
     password: process.env.REDIS_PASSWORD,
     tls: isTls ? { rejectUnauthorized: false } : undefined,
-    connectTimeout: 10000,
+    connectTimeout: REDIS_CONNECT_TIMEOUT,
     commandTimeout: 10000,
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
+    maxRetriesPerRequest: REDIS_MAX_RETRIES,
+    lazyConnect: true,
     keepAlive: 30000,
-    retryStrategy: (times) => {
+    family: 4,
+    keyPrefix: 'cinemash:',
+    enableOfflineQueue: false,
+    enableReadyCheck: false,
+    retryStrategy: (times: number) => {
       // Exponential backoff with jitter, caps at 10 seconds
       const delay = Math.min(times * 500, 10000);
       return delay + Math.random() * 1000;

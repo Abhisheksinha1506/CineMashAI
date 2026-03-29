@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/navbar';
 import { StudioToolbar } from '@/components/studio/StudioToolbar';
-import { CreativeCanvas } from '@/components/studio/CreativeCanvas';
+import CreativeCanvas from '@/components/studio/CreativeCanvas';
 import { FloatingFuseButton } from '@/components/studio/FloatingFuseButton';
 import { TrendingMoviesRow } from '@/components/studio/TrendingMoviesRow';
 import { DynamicGuide, GuideButton } from '@/components/ui/DynamicGuide';
