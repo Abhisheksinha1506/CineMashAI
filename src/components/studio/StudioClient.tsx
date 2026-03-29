@@ -307,15 +307,24 @@ export function StudioClient({ resetKey, initialTrendingMovies = [] }: StudioCli
     
     setIsGenerating('Creating your fusion...');
     try {
+      // Process movie IDs correctly - handle both fusion movies and regular movies
+      const movieIds = selectedMovies.map((m) => {
+        // If it's a fusion movie, pass the full object
+        if (m.isFusion) {
+          return m;
+        }
+        // If it's a regular movie, convert string ID to number
+        const id = Number(m.id);
+        if (isNaN(id)) {
+          throw new Error(`Invalid movie ID: ${m.id}. Cannot convert to number.`);
+        }
+        return id;
+      });
+      
       const response = await fetch('/api/fuse-simple', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          movieIds: selectedMovies.map((m) => {
-            const id = Number(m.id);
-            return isNaN(id) ? 0 : id;
-          }) 
-        }),
+        body: JSON.stringify({ movieIds }),
       });
       
       const result = await response.json();
@@ -339,15 +348,24 @@ export function StudioClient({ resetKey, initialTrendingMovies = [] }: StudioCli
     
     setIsGenerating('Regenerating fusion...');
     try {
+      // Process movie IDs correctly - handle both fusion movies and regular movies
+      const movieIds = selectedMovies.map((m) => {
+        // If it's a fusion movie, pass the full object
+        if (m.isFusion) {
+          return m;
+        }
+        // If it's a regular movie, convert string ID to number
+        const id = Number(m.id);
+        if (isNaN(id)) {
+          throw new Error(`Invalid movie ID: ${m.id}. Cannot convert to number.`);
+        }
+        return id;
+      });
+      
       const response = await fetch('/api/fuse-simple', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          movieIds: selectedMovies.map((m) => {
-            const id = Number(m.id);
-            return isNaN(id) ? 0 : id;
-          }) 
-        }),
+        body: JSON.stringify({ movieIds }),
       });
       
       const result = await response.json();
