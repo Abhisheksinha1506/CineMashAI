@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { fusions } from '@/lib/schema';
 import { checkTokenBudget, consumeTokens } from '@/lib/token-budget';
 import { hashIP } from '@/lib/utils';
-import { getMovieDetails } from '@/lib/tmdb-simple';
+import { getMovieDetailsOrFusion } from '@/lib/tmdb-simple';
 import { generateFusionDetails, generateShareToken } from '@/lib/ai-server';
 import { getCachedFusion, cacheFusion, shouldCacheFusion } from '@/lib/fusion-cache-simple';
 import crypto from 'crypto';
@@ -58,6 +58,23 @@ export async function POST(request: NextRequest) {
           // Fallback to sourceMovieIds if sourceMovies not available
           allMovieIds.push(...movie.sourceMovieIds.map((id: string) => Number(id)));
         }
+      } else if (typeof movie === 'object' && movie.id && movie.isFusion !== false) {
+        // This might be a fusion movie object, try to get its details
+        try {
+          const fusionDetails = await getMovieDetailsOrFusion(movie.id.toString());
+          if (fusionDetails && fusionDetails.isFusion && fusionDetails.sourceMovies) {
+            moviesData.push(...fusionDetails.sourceMovies);
+            allMovieIds.push(...fusionDetails.sourceMovies.map((m: any) => Number(m.id)));
+          } else {
+            // Treat as regular movie
+            moviesData.push(movie);
+            allMovieIds.push(Number(movie.id));
+          }
+        } catch (error) {
+          console.error('Error processing fusion movie:', error);
+          // Skip this movie and continue
+          continue;
+        }
       } else {
         // This is a regular movie ID
         allMovieIds.push(Number(movie));
@@ -75,7 +92,7 @@ export async function POST(request: NextRequest) {
     
     if (missingMovieIds.length > 0) {
       const missingMoviesData = await Promise.all(
-        missingMovieIds.map((id: number) => getMovieDetails(id.toString()))
+        missingMovieIds.map((id: number) => getMovieDetailsOrFusion(id.toString()))
       );
       moviesData.push(...missingMoviesData);
     }
