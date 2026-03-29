@@ -29,6 +29,8 @@ const getCachedGallery = unstable_cache(
         resultsData = data;
       }
 
+      console.log(`[Gallery] Retrieved ${resultsData?.length || 0} fusions from database`);
+
       // Map database results to frontend format
       const formattedResults = resultsData.map((fusion: any) => {
         let movieIds = [];

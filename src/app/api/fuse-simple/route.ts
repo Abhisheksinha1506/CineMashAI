@@ -164,16 +164,23 @@ export async function POST(request: NextRequest) {
     const shareToken = generateShareToken();
     
     // Save to database with complete movie details
-    await db.insert(fusions).values({
-      id: crypto.randomUUID(),
-      share_token: shareToken,
-      movie_ids: JSON.stringify(movieIds.map((id: number) => id.toString())),
-      fusion_data: JSON.stringify(fusionData),
-      source_movies: JSON.stringify(moviesData), // Store complete movie objects for remix
-      ip_hash: userId,
-      upvotes: 0,
-      created_at: new Date().toISOString(),
-    });
+    try {
+      const dbResult = await db.insert(fusions).values({
+        id: crypto.randomUUID(),
+        share_token: shareToken,
+        movie_ids: JSON.stringify(movieIds.map((id: number) => id.toString())),
+        fusion_data: JSON.stringify(fusionData),
+        source_movies: JSON.stringify(moviesData), // Store complete movie objects for remix
+        ip_hash: userId,
+        upvotes: 0,
+        created_at: new Date().toISOString(),
+      });
+      
+      console.log(`[Fuse-Simple] Successfully saved fusion: ${fusionData.title} (${shareToken})`);
+    } catch (dbError) {
+      console.error(`[Fuse-Simple] Database save error:`, dbError);
+      throw new Error(`Failed to save fusion to database: ${dbError instanceof Error ? dbError.message : 'Unknown error'}`);
+    }
 
     // Cache the result for future requests
     if (shouldCacheFusion(movieIds, constraints)) {
